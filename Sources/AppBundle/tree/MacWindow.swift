@@ -15,17 +15,56 @@ final class MacWindow: Window {
     @MainActor static var allWindowsMap: [UInt32: MacWindow] = [:]
     @MainActor static var allWindows: [MacWindow] { Array(allWindowsMap.values) }
 
+    /// The AX reads `getOrRegister` needs before it can bind a not-yet-known window into the tree.
+    /// They touch nothing but the window itself, which is what lets `prefetchAxSnapshots` issue them
+    /// for many windows concurrently ahead of the serial registration loop.
+    struct AxSnapshot: Sendable {
+        let rect: Rect?
+        let windowType: AxUiElementWindowType
+    }
+
+    /// Read the per-window AX data for every window in `mapping` that isn't registered yet. One task
+    /// per window, but the parallelism that matters is across apps: each MacApp serves its reads from
+    /// its own AX thread, so the round-trips of different apps overlap instead of being serialized by
+    /// the caller's `await`.
+    @MainActor
+    static func prefetchAxSnapshots(_ mapping: [MacApp: [UInt32]]) async throws -> [UInt32: AxSnapshot] {
+        try await withThrowingTaskGroup(of: (UInt32, AxSnapshot).self, returning: [UInt32: AxSnapshot].self) { group in
+            for (app, windowIds) in mapping {
+                for windowId in windowIds where allWindowsMap[windowId] == nil {
+                    try checkCancellation()
+                    let windowLevel = getWindowLevel(for: windowId)
+                    group.addTask { @Sendable @MainActor in
+                        let rect = try await app.getAxRect(windowId)
+                        let windowType = try await app.getAxUiElementWindowType(windowId, windowLevel)
+                        return (windowId, AxSnapshot(rect: rect, windowType: windowType))
+                    }
+                }
+            }
+            var result: [UInt32: AxSnapshot] = [:]
+            for try await (windowId, snapshot) in group {
+                result[windowId] = snapshot
+            }
+            return result
+        }
+    }
+
     @MainActor
     @discardableResult
     static func getOrRegister(
         windowId: UInt32,
         macApp: MacApp,
         replacingNativeTabWindowId: UInt32? = nil,
+        snapshot: AxSnapshot? = nil,
     ) async throws -> MacWindow {
         if let existing = existingWindowDiscardingStaleReplacement(windowId: windowId, macApp: macApp, replacingNativeTabWindowId: replacingNativeTabWindowId) {
             return existing
         }
-        let rect = try await macApp.getAxRect(windowId)
+        let rect: Rect? = if let snapshot {
+            snapshot.rect
+        } else {
+            try await macApp.getAxRect(windowId)
+        }
         if let replacement = try await replacementWindowIfApplicable(windowId: windowId, macApp: macApp, rect: rect, staleWindowId: replacingNativeTabWindowId) {
             return replacement
         }
@@ -36,6 +75,7 @@ final class MacWindow: Window {
                 ? (rect?.center.monitorApproximation ?? mainMonitor).activeWorkspace
                 : focus.workspace,
             window: nil,
+            windowType: snapshot?.windowType,
         )
 
         // atomic synchronous section
@@ -219,7 +259,16 @@ final class MacWindow: Window {
     func saveFloatingPositionIfNeeded() async throws -> Bool {
         guard !isHiddenInCorner else { return true }
         guard !screenSleepWakeInProgress else { return false }
-        guard let workspace = nodeWorkspace else { return false }
+        guard let workspace = nodeWorkspace, let parent else { return false }
+        // Tiling windows are put back by layoutRecursive, and unhideFromCorner throws their saved
+        // position away unread. Skip the blocking AX rect round-trip and store only the sentinel that
+        // marks the window as hidden - the same trick preventNewWindowFlickerIfNeeded uses. That's one
+        // saved round-trip per tiled window on every non-visible workspace, at startup and on every
+        // workspace switch.
+        if case .tiling = getChildParentRelation(child: self, parent: parent) {
+            prevUnhiddenProportionalPositionInsideWorkspaceRect = .zero
+            return true
+        }
         let workspaceRect = workspace.workspaceMonitor.rect
         let visibleRect = workspace.workspaceMonitor.visibleRect
         guard let windowRect = try await getAxRect() else { return false }
@@ -360,9 +409,19 @@ extension Window {
 
 // The function is private because it's unsafe. It leaves the window in unbound state
 @MainActor
-private func unbindAndGetBindingDataForNewWindow(_ windowId: UInt32, _ macApp: MacApp, _ workspace: Workspace, window: Window?) async throws -> BindingData {
-    let windowLevel = getWindowLevel(for: windowId)
-    return switch try await macApp.getAxUiElementWindowType(windowId, windowLevel) {
+private func unbindAndGetBindingDataForNewWindow(
+    _ windowId: UInt32,
+    _ macApp: MacApp,
+    _ workspace: Workspace,
+    window: Window?,
+    windowType: AxUiElementWindowType? = nil,
+) async throws -> BindingData {
+    let resolvedWindowType: AxUiElementWindowType = if let windowType {
+        windowType // Already read by MacWindow.prefetchAxSnapshots
+    } else {
+        try await macApp.getAxUiElementWindowType(windowId, getWindowLevel(for: windowId))
+    }
+    return switch resolvedWindowType {
         case .popup: BindingData(parent: macosPopupWindowsContainer, adaptiveWeight: WEIGHT_AUTO, index: INDEX_BIND_LAST)
         case .dialog: BindingData(parent: workspace, adaptiveWeight: WEIGHT_AUTO, index: INDEX_BIND_LAST)
         case .window: unbindAndGetBindingDataForNewTilingWindow(workspace, window: window)

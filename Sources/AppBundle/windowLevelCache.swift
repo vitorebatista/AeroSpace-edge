@@ -3,10 +3,22 @@ import Foundation
 
 @MainActor
 private var cache: [UInt32: MacOsWindowLevel] = [:]
+/// True once the cache has been re-enumerated during the current refresh session.
+@MainActor
+private var cacheIsFresh = false
+
+/// Called at the top of every refresh session. The cache is a snapshot of on-screen windows, so it
+/// does have to be re-read once per session - but only once.
+@MainActor
+func invalidateWindowLevelCache() { cacheIsFresh = false }
 
 @MainActor
 func getWindowLevel(for windowId: UInt32) -> MacOsWindowLevel? {
     if let existing = cache[windowId] { return existing }
+    // CGWindowListCopyWindowInfo is asked for on-screen windows only, so minimized windows, hidden
+    // apps and windows on other macOS Spaces are permanently absent from it. Without this guard every
+    // one of them re-enumerates the entire window list, gets nothing, and the next one does it again.
+    if cacheIsFresh { return nil }
     return refreshWindowLevelCache()?[windowId]
 }
 
@@ -32,6 +44,7 @@ private func refreshWindowLevelCache() -> [UInt32: MacOsWindowLevel]? {
         result[windowId] = .new(windowLevel: windowLayer)
     }
     cache = result
+    cacheIsFresh = true
     return result
 }
 

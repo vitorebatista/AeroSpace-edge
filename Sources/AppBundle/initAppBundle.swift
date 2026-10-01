@@ -17,17 +17,21 @@ import Foundation
             interceptTermination(SIGINT)
             interceptTermination(SIGKILL)
         }
-        if try await !reloadConfig() {
-            var out = ""
-            check(
-                try await reloadConfig(forceConfigUrl: defaultConfigUrl, stdout: &out),
-                """
-                Can't load default config. Your installation is probably corrupted.
-                Please don't modify \(defaultConfigUrl.description.singleQuoted)
+        do {
+            let state = signposter.beginInterval("startup.config")
+            defer { signposter.endInterval("startup.config", state) }
+            if try await !reloadConfig() {
+                var out = ""
+                check(
+                    try await reloadConfig(forceConfigUrl: defaultConfigUrl, stdout: &out),
+                    """
+                    Can't load default config. Your installation is probably corrupted.
+                    Please don't modify \(defaultConfigUrl.description.singleQuoted)
 
-                \(out)
-                """,
-            )
+                    \(out)
+                    """,
+                )
+            }
         }
 
         // Before the accessibility prompt: if another AeroSpace owns the windows, that's the thing the
@@ -38,6 +42,8 @@ import Foundation
         GlobalObserver.initObserver()
         Workspace.garbageCollectUnusedWorkspaces() // init workspaces
         _ = Workspace.all.first?.focusWorkspace()
+        // No signpost around this call, nor around the light session below: both
+        // runHeavyCompleteRefreshSession and runLightSession already emit one keyed on #function.
         await runHeavyCompleteRefreshSession(
             .startup,
             // It's important for the first initialization to be non cancellable
@@ -47,7 +53,11 @@ import Foundation
         )
         // After the refresh session above: the live windows exist by now, so they can be put back
         // where the previous run left them.
-        try await restorePersistedLayout(focusedWorkspaceAtLaunch: focusedWorkspaceAtLaunch)
+        do {
+            let state = signposter.beginInterval("startup.restorePersistedLayout")
+            defer { signposter.endInterval("startup.restorePersistedLayout", state) }
+            try await restorePersistedLayout(focusedWorkspaceAtLaunch: focusedWorkspaceAtLaunch)
+        }
         try await runLightSession(.startup, .forceRun) {
             smartLayoutAtStartup()
             _ = try await config.afterStartupCommand.runCmdSeq(.defaultEnv, .emptyStdin)

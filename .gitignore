@@ -25,3 +25,9 @@ xcshareddata/
 
 # Claude Code agent worktrees (transient). Skills under .claude/skills/ are tracked.
 /.claude/worktrees
+
+# Local Codex worktrees are transient and must never be committed.
+/.worktrees
+
+# Local trace bundles and machine-specific benchmark results.
+/.benchmarks
