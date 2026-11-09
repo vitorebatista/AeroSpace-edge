@@ -6,6 +6,14 @@ struct LayoutCommand: Command {
     /*conforms*/ let shouldResetClosedWindowsCache = true
 
     func run(_ env: CmdEnv, _ io: CmdIo) async throws -> BinaryExitCode {
+        if args.forNextDetectedWindow {
+            // The parser guarantees exactly one tiling|floating argument
+            guard let it = args.toggleBetween.val.singleOrNil() else {
+                return .fail(io.err(layoutCommandForNextDetectedWindowFlagIncompatibilityMsg))
+            }
+            layoutForNextDetectedWindow = it
+            return .succ
+        }
         guard let target = args.resolveTargetOrReportError(env, io) else { return .fail }
         if args.root {
             return changeRootLayout(io, root: target.workspace.rootTilingContainer, toggleBetween: args.toggleBetween.val)
@@ -16,6 +24,9 @@ struct LayoutCommand: Command {
         return try await changeWindowLayout(io, window: window, targetWorkspace: target.workspace, toggleBetween: args.toggleBetween.val)
     }
 }
+
+/// Scheduled by `layout --for-next-detected-window`, consumed by the next detected window (see tryOnWindowDetected)
+@MainActor var layoutForNextDetectedWindow: LayoutCmdArgs.LayoutDescription? = nil
 
 @MainActor private func changeWindowLayout(
     _ io: CmdIo,

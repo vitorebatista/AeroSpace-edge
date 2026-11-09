@@ -69,6 +69,7 @@ let join_with_help_generated = """
 let layout_help_generated = """
     USAGE: layout [-h|--help] [--window-id <window-id>|--root]
                   (h_tiles|v_tiles|h_accordion|v_accordion|tiles|accordion|horizontal|vertical|tiling|floating|sticky)...
+       OR: layout [-h|--help] --for-next-detected-window (tiling|floating)
     """
 let list_apps_help_generated = """
     USAGE: list-apps [-h|--help] [--macos-native-hidden [no]] [--format <output-format>] [--count] [--json]

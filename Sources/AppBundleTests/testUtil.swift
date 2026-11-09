@@ -37,6 +37,7 @@ func setUpWorkspacesForTests() {
     check(focus.workspace === Workspace.all.singleOrNil(), Workspace.all.map(\.description).joined(separator: ", "))
     check(mainMonitor.setActiveWorkspace(focus.workspace))
 
+    layoutForNextDetectedWindow = nil
     TestApp.shared.focusedWindow = nil
     TestApp.shared.windows = []
 }
