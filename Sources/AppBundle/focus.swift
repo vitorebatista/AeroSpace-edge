@@ -221,6 +221,35 @@ extension Workspace {
                 environment[AEROSPACE_WINDOW_ID] = w.windowId.description
         }
         process.environment = environment
-        _ = Result { try process.run() }
+        if case .failure(let e) = Result(catching: { try process.run() }) {
+            // Don't die on transient spawn failures (e.g. fork(2) "Resource temporarily unavailable").
+            // Report the failure to the user instead https://github.com/nikitabobko/AeroSpace/issues/463
+            reportCallbackError(
+                """
+                Failed to run 'exec-on-workspace-change' callback:
+                    \(config.execOnWorkspaceChange.joined(separator: " "))
+
+                Error: \(e.localizedDescription)
+                """,
+            )
+        }
+    }
+}
+
+func reportCallbackError(_ message: String) {
+    if isUnitTest {
+        eprint(message)
+    } else {
+        showMessageInGui(
+            filenameIfConsoleApp: "aerospace-edge-callback-error.txt",
+            title: "\(aeroSpaceAppName) Callback Error",
+            message: message + "\n\n" + """
+                If this keeps happening, please report to:
+                    https://github.com/vitorebatista/AeroSpace-edge/discussions/categories/potential-bugs
+
+                Version: \(aeroSpaceAppVersion)
+                Git hash: \(gitHash)
+                """,
+        )
     }
 }
