@@ -1,5 +1,6 @@
 import AppKit
 import Common
+import os
 
 // Potential alternative implementation
 // https://github.com/swiftlang/swift-evolution/blob/main/proposals/0392-custom-actor-executors.md
@@ -16,6 +17,9 @@ final class MacApp: AbstractApp {
     var lastNativeFocusedWindowId: UInt32? = nil
     private var thread: Thread?
     private var setFrameJobs: [UInt32: RunLoopJob] = [:]
+    /// Windows whose last frame write may have ended before the GTK redraw nudge (see setAxFrame), e.g. because
+    /// the job was cancelled in between. They never take the "frame already applied" shortcut.
+    private let redrawNudgePending = OSAllocatedUnfairLock<Set<UInt32>>(initialState: [])
     @MainActor private static var focusJob: RunLoopJob? = nil
 
     /*conforms*/ var name: String? { nsApp.localizedName }
@@ -221,8 +225,17 @@ final class MacApp: AbstractApp {
 
     func setAxFrame(_ windowId: UInt32, _ topLeft: CGPoint?, _ size: CGSize?) {
         setFrameJobs.removeValue(forKey: windowId)?.cancel()
-        setFrameJobs[windowId] = withWindowAsync(windowId) { [axApp] window, job in
+        setFrameJobs[windowId] = withWindowAsync(windowId) { [axApp, redrawNudgePending] window, job in
             guard let axApp = axApp.threadGuardedOrNil else { return }
+            // Writes are expensive and trigger kAXMoved/kAXResized, which schedule yet another refresh.
+            // Skipping also skips the redraw nudge below: nothing moved, so there's nothing to redraw. Unless the
+            // previous write was interrupted before its nudge, in which case the frame matches but the app may be stale
+            if !redrawNudgePending.withLock({ $0.contains(windowId) }),
+               isFrameAlreadyApplied(topLeft, size, currentTopLeft: { window.get(Ax.topLeftCornerAttr) }, currentSize: { window.get(Ax.sizeAttr) })
+            {
+                return
+            }
+            redrawNudgePending.withLock { _ = $0.insert(windowId) }
             try disableAnimations(app: axApp, job) {
                 try setFrame(window, topLeft, size, job)
             }
@@ -237,6 +250,7 @@ final class MacApp: AbstractApp {
                 window.set(Ax.sizeAttr, CGSize(width: size.width + 1, height: size.height))
                 window.set(Ax.sizeAttr, size)
             }
+            redrawNudgePending.withLock { _ = $0.remove(windowId) }
         }
     }
 
@@ -562,6 +576,26 @@ private func getAxRect(window: AXUIElement, job: RunLoopJob) throws -> Rect? {
     try job.checkCancellation()
     guard let size = window.get(Ax.sizeAttr) else { return nil }
     return Rect(topLeftX: topLeftCorner.x, topLeftY: topLeftCorner.y, width: size.width, height: size.height)
+}
+
+/// Whether the window already has the target frame, so the AX write (and the redraw nudge) can be skipped.
+/// AX frames are integral, while layout may produce fractional values, hence the 1px tolerance.
+/// Comparing against the live frame (not a cache of the last applied one) stays correct when the app or the user
+/// moves the window. The current frame is read lazily: a nil target component is not read at all
+func isFrameAlreadyApplied(
+    _ topLeft: CGPoint?,
+    _ size: CGSize?,
+    currentTopLeft: () -> CGPoint?,
+    currentSize: () -> CGSize?,
+) -> Bool {
+    func isClose(_ a: CGFloat, _ b: CGFloat) -> Bool { abs(a - b) < 1 }
+    if let topLeft {
+        guard let cur = currentTopLeft(), isClose(cur.x, topLeft.x), isClose(cur.y, topLeft.y) else { return false }
+    }
+    if let size {
+        guard let cur = currentSize(), isClose(cur.width, size.width), isClose(cur.height, size.height) else { return false }
+    }
+    return true
 }
 
 private func setFrame(_ window: AXUIElement, _ topLeft: CGPoint?, _ size: CGSize?, _ job: RunLoopJob) throws {
