@@ -109,7 +109,8 @@ final class FocusCommandTest: XCTestCase {
         }
         let b = Task { @MainActor in try await parseCommand("focus right").cmdOrDie.run(.defaultEnv, .emptyStdin) }
         try await bSuspended.await()
-        assertEquals(floating1.isBound, false)
+        // makeFloatingWindowsSeenAsTiling doesn't mutate the tree until its last await, so 'b' hasn't touched floating1
+        assertTrue(floating1.parent === workspace)
         assertTrue(floating2.isBound)
 
         await aResume.signalToAll()
@@ -156,7 +157,8 @@ final class FocusCommandTest: XCTestCase {
         }
         let b = Task { @MainActor in try await parseCommand("focus right").cmdOrDie.run(.defaultEnv, .emptyStdin) }
         try await bSuspended.await()
-        assertEquals(floating1.isBound, false)
+        // makeFloatingWindowsSeenAsTiling doesn't mutate the tree until its last await, so 'b' hasn't touched floating1
+        assertTrue(floating1.parent === workspace)
 
         await aResume.signalToAll()
         _ = try await a.value
@@ -199,7 +201,8 @@ final class FocusCommandTest: XCTestCase {
         }
         let b = Task { @MainActor in try await parseCommand("focus right").cmdOrDie.run(.defaultEnv, .emptyStdin) }
         try await bSuspended.await()
-        assertEquals(floating1.isBound, false)
+        // makeFloatingWindowsSeenAsTiling doesn't mutate the tree until its last await, so 'b' hasn't touched floating1
+        assertTrue(floating1.parent === workspace)
 
         await aResume.signalToAll()
         _ = try await a.value
@@ -384,6 +387,77 @@ final class FocusCommandTest: XCTestCase {
         args.rawBoundariesAction = .wrapAroundTheWorkspace
         assertEquals(try await FocusCommand(args: args).run(.defaultEnv, .emptyStdin).exitCode.rawValue, 0)
         assertEquals(focus.windowOrNil?.windowId, 1)
+    }
+
+    func testFocusDfsRelativeOverFloatingWindows() async throws {
+        let workspace = Workspace.get(byName: name)
+        TestWindow.new(id: 1, parent: workspace, rect: Rect(topLeftX: 0, topLeftY: 0, width: 100, height: 100))
+        TestWindow.new(id: 2, parent: workspace, rect: Rect(topLeftX: 10, topLeftY: 10, width: 100, height: 100))
+        TestWindow.new(id: 3, parent: workspace, rect: Rect(topLeftX: 20, topLeftY: 20, width: 100, height: 100))
+        assertEquals(TestWindow.new(id: 4, parent: workspace, rect: Rect(topLeftX: 30, topLeftY: 30, width: 100, height: 100)).focusWindow(), true)
+
+        assertEquals(focus.windowOrNil?.windowId, 4)
+        for expectedWindowId in [1, 2, 3, 4, 1] as [UInt32] {
+            try await parseCommand("focus --wrap-around dfs-next").cmdOrDie.run(.defaultEnv, .emptyStdin)
+            assertEquals(focus.windowOrNil?.windowId, expectedWindowId)
+        }
+        assertEquals(workspace.floatingWindows.count, 4)
+        assertEquals(workspace.rootTilingContainer.allLeafWindowsRecursive.count, 0)
+
+        for expectedWindowId in [4, 3, 2, 1] as [UInt32] {
+            try await parseCommand("focus --wrap-around dfs-prev").cmdOrDie.run(.defaultEnv, .emptyStdin)
+            assertEquals(focus.windowOrNil?.windowId, expectedWindowId)
+        }
+        assertEquals(workspace.floatingWindows.count, 4)
+        assertEquals(workspace.rootTilingContainer.allLeafWindowsRecursive.count, 0)
+    }
+
+    func testFocusDfsRelativeOverFloatingWindowsWithEqualCenters() async throws {
+        let workspace = Workspace.get(byName: name)
+        TestWindow.new(id: 1, parent: workspace, rect: Rect(topLeftX: 0, topLeftY: 0, width: 100, height: 100))
+        TestWindow.new(id: 2, parent: workspace, rect: Rect(topLeftX: 0, topLeftY: 0, width: 100, height: 100))
+        TestWindow.new(id: 3, parent: workspace, rect: Rect(topLeftX: 10, topLeftY: 10, width: 100, height: 100))
+        assertEquals(TestWindow.new(id: 4, parent: workspace, rect: Rect(topLeftX: 20, topLeftY: 20, width: 100, height: 100)).focusWindow(), true)
+
+        assertEquals(focus.windowOrNil?.windowId, 4)
+        for expectedWindowId in [1, 2, 3, 4, 1] as [UInt32] {
+            try await parseCommand("focus --wrap-around dfs-next").cmdOrDie.run(.defaultEnv, .emptyStdin)
+            assertEquals(focus.windowOrNil?.windowId, expectedWindowId)
+        }
+        assertEquals(workspace.floatingWindows.count, 4)
+        assertEquals(workspace.rootTilingContainer.allLeafWindowsRecursive.count, 0)
+    }
+
+    func testFocusDfsRelativeOverTilingAndFloatingWindows() async throws {
+        let workspace = Workspace.get(byName: name)
+        workspace.rootTilingContainer.apply {
+            assertEquals(TestWindow.new(id: 1, parent: $0).focusWindow(), true)
+            TestWindow.new(id: 2, parent: $0)
+        }
+        TestWindow.new(id: 3, parent: workspace, rect: Rect(topLeftX: 10, topLeftY: 10, width: 100, height: 100))
+        TestWindow.new(id: 4, parent: workspace, rect: Rect(topLeftX: 20, topLeftY: 20, width: 100, height: 100))
+
+        assertEquals(focus.windowOrNil?.windowId, 1)
+        for expectedWindowId in [2, 3, 4, 1] as [UInt32] {
+            try await parseCommand("focus --wrap-around dfs-next").cmdOrDie.run(.defaultEnv, .emptyStdin)
+            assertEquals(focus.windowOrNil?.windowId, expectedWindowId)
+        }
+        assertEquals(workspace.floatingWindows.count, 2)
+        assertEquals(workspace.rootTilingContainer.allLeafWindowsRecursive.count, 2)
+    }
+
+    func testFocusDfsRelativeFailsWhenFocusedWindowIsOutsideTilingTree() async throws {
+        Workspace.get(byName: name).rootTilingContainer.apply {
+            TestWindow.new(id: 1, parent: $0)
+        }
+        assertEquals(
+            TestWindow.new(id: 2, parent: Workspace.get(byName: name).macOsNativeFullscreenWindowsContainer).focusWindow(),
+            true,
+        )
+
+        let result = try await parseCommand("focus dfs-next").cmdOrDie.run(.defaultEnv, .emptyStdin)
+        assertEquals(result.exitCode.rawValue, 2)
+        assertEquals(result.stderr, ["Can't find the focused window in the tiling tree of workspace '\(name)'"])
     }
 }
 
