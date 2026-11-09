@@ -71,4 +71,26 @@ final class BalanceSizesCommandTest: XCTestCase {
         // The total is unchanged, so the following layout pass doesn't scale the windows up
         assertEquals(window1.hWeight + window2.hWeight + window3.hWeight, 12)
     }
+
+    func testBalanceSizesResetsClosedWindowsCache() async throws {
+        resetClosedWindowsCache()
+        defer { resetClosedWindowsCache() }
+
+        let workspace = Workspace.get(byName: name)
+        let window1 = TestWindow.new(id: 1, parent: workspace.rootTilingContainer, adaptiveWeight: 100)
+        let window2 = TestWindow.new(id: 2, parent: workspace.rootTilingContainer, adaptiveWeight: 300)
+        let closedWindow = TestWindow.new(id: 3, parent: workspace.rootTilingContainer)
+        assertEquals(window1.focusWindow(), true)
+
+        cacheClosedWindowIfNeeded()
+        closedWindow.unbindFromParent()
+
+        let result = try await parseCommand("balance-sizes").cmdOrDie
+            .run(.defaultEnv.copy(\.workspaceName, name), .emptyStdin)
+
+        assertEquals(result.exitCode.rawValue, 0)
+        assertEquals(window1.hWeight, window2.hWeight)
+        // The cache holds the pre-balance proportions. Restoring it would undo balance-sizes
+        assertEquals(try await restoreClosedWindowsCacheIfNeeded(newlyDetectedWindow: closedWindow), false)
+    }
 }
