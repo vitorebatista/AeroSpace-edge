@@ -388,6 +388,15 @@ final class MacApp: AbstractApp {
         }
     }
 
+    func getMacosWindowNativeState(_ windowId: UInt32) async throws -> MacosWindowNativeState? {
+        try await withWindow(windowId) { window, job in
+            if window.get(Ax.isFullscreenAttr) == true { return .nativeFullscreen }
+            try job.checkCancellation()
+            if window.get(Ax.minimizedAttr) == true { return .nativeMinimized }
+            return .normal
+        }
+    }
+
     @MainActor
     static func refreshAllAndGetAliveWindowIds(frontmostAppBundleId: String?) async throws -> [MacApp: [UInt32]] {
         for (_, app) in MacApp.allAppsMap { // gc dead apps

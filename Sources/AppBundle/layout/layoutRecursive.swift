@@ -21,11 +21,15 @@ extension TreeNode {
                 lastAppliedLayoutPhysicalRect = physicalRect
                 lastAppliedLayoutVirtualRect = virtual
                 try await workspace.rootTilingContainer.layoutRecursive(point, width: width, height: height, virtual: virtual, context)
-                for window in workspace.children.filterIsInstance(of: Window.self) {
-                    if window.isAwaitingOnWindowDetected { continue }
+                let windows = workspace.children.filterIsInstance(of: Window.self).filter { !$0.isAwaitingOnWindowDetected }
+                // todo make it parallel among different workspaces. Get rid of 'try await'
+                let rects = try await windows.mapConcurrently { try await $0.getAxRect() } // Probably not idempotent
+                for (window, windowRect) in zip(windows, rects) {
+                    // The reads above are suspension points. Skip windows that changed meanwhile
+                    if window.isAwaitingOnWindowDetected || window.parent !== workspace { continue }
                     window.lastAppliedLayoutPhysicalRect = nil
                     window.lastAppliedLayoutVirtualRect = nil
-                    try await window.layoutFloatingWindow(context)
+                    window.layoutFloatingWindow(context, windowRect)
                 }
             case .window(let window):
                 if window.isAwaitingOnWindowDetected { break }
@@ -78,9 +82,8 @@ private struct LayoutContext {
 
 extension Window {
     @MainActor
-    fileprivate func layoutFloatingWindow(_ context: LayoutContext) async throws {
+    fileprivate func layoutFloatingWindow(_ context: LayoutContext, _ windowRect: Rect?) {
         let workspace = context.workspace
-        let windowRect = try await getAxRect() // Probably not idempotent
         let currentMonitor = windowRect?.center.monitorApproximation
         if let currentMonitor, let windowRect, workspace != currentMonitor.activeWorkspace {
             let windowTopLeftCorner = windowRect.topLeftCorner
