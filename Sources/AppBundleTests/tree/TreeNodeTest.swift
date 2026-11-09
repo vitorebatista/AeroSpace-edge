@@ -29,6 +29,32 @@ final class TreeNodeTest: XCTestCase {
         XCTAssertTrue(!workspace.isEffectivelyEmpty)
     }
 
+    // The fork keeps floating windows as direct children of the workspace (upstream has a floating windows container),
+    // so the container that stays the most recent child after its last window is gone is the macOS fullscreen one
+    func testToLiveFocus_skipsEmptyMacosFullscreenContainer() {
+        let workspace = Workspace.get(byName: name)
+        workspace.rootTilingContainer.apply {
+            TestWindow.new(id: 1, parent: $0)
+            assertTrue(TestWindow.new(id: 2, parent: $0).focusWindow())
+        }
+        let fullscreenWindow = TestWindow.new(id: 3, parent: workspace.macOsNativeFullscreenWindowsContainer)
+        assertTrue(fullscreenWindow.focusWindow())
+
+        fullscreenWindow.unbindFromParent()
+        assertEquals(workspace.toLiveFocus().windowOrNil?.windowId, 2)
+    }
+
+    func testToLiveFocus_skipsEmptyTilingContainer() {
+        let workspace = Workspace.get(byName: name)
+        TestWindow.new(id: 1, parent: workspace)
+        assertTrue(TestWindow.new(id: 2, parent: workspace).focusWindow())
+        let tilingWindow = TestWindow.new(id: 3, parent: workspace.rootTilingContainer)
+        assertTrue(tilingWindow.focusWindow())
+
+        tilingWindow.unbindFromParent()
+        assertEquals(workspace.toLiveFocus().windowOrNil?.windowId, 2)
+    }
+
     func testNormalizeContainers_dontRemoveRoot() {
         let workspace = Workspace.get(byName: name)
         weak let root = workspace.rootTilingContainer
