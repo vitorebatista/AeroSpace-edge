@@ -117,7 +117,7 @@ func dictionaryFromKeyValueRows(_ rows: [KeyValueRow]) -> [String: String] {
 /// or gap value doesn't currently parse (e.g. mid-typing) without touching `rows`.
 func parsePerMonitorGapRows(_ rows: [KeyValueRow]) -> [PerMonitorValue<Int>] {
     rows.compactMap { row in
-        guard let description = parseMonitorDescription(row.key).getOrNil(), let int = Int(row.value) else { return nil }
+        guard let description = parseMonitorDescription(row.key).getIgnoringErrorsOrNil(), let int = Int(row.value) else { return nil }
         return PerMonitorValue(description: description, value: int)
     }
 }
@@ -320,7 +320,7 @@ struct WorkspacesSection: View {
                         for row in rows where !row.key.isEmpty {
                             let parsed = row.value
                                 .split(separator: ",")
-                                .compactMap { parseMonitorDescription($0.trimmingCharacters(in: .whitespaces)).getOrNil() }
+                                .compactMap { parseMonitorDescription($0.trimmingCharacters(in: .whitespaces)).getIgnoringErrorsOrNil() }
                             // Skip, don't drop: a half-typed monitor parses to nothing, and
                             // committing that empty list would assign the workspace to no
                             // monitor at all rather than leaving it as it was.

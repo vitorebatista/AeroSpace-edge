@@ -52,7 +52,7 @@ struct ConfigTomlWriterTest {
         assertEquals(parsed.accordionPadding, 45)
         assertEquals(parsed.focusFollowsAppActivation, .smart)
         assertEquals(parsed.newWindowPreventFlicker, true)
-        assertEquals(parsed.configVersion, 2)
+        assertEquals(parsed.configVersion, ._2)
     }
 
     @Test func testWindowBorderRoundTrips() {
@@ -94,7 +94,7 @@ struct ConfigTomlWriterTest {
         var document = TomlBlockDocument(text)
         let (config, errors) = parseConfigTuple(text)
         assertEquals(errors, [])
-        assertEquals(config.configVersion, 1)
+        assertEquals(config.configVersion, ._1)
         assertEquals(Array(config.persistentWorkspaces), ["1"])
 
         let original = ConfigTomlWriter.draft(from: config, rawExec: RawExecConfig(), document: document)
@@ -188,7 +188,7 @@ struct ConfigTomlWriterTest {
         }
         assertEquals(parsed.modes[mainModeId]?.bindings.isEmpty, false)
         assertEquals(parsed.onWindowDetected.count, 1)
-        assertEquals(parsed.onFocusChanged.count, 1)
+        assertEquals(parsed.onFocusChanged.flatten().count, 1)
     }
 
     @Test func testDefaultsAreNotWrittenWhenAbsentFromTheFile() {

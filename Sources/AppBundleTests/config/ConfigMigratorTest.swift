@@ -26,8 +26,8 @@ struct ConfigMigratorTest {
         #expect(migrated.errors == [])
         guard migrated.errors.isEmpty else { return }
 
-        let sourceMatchers = source.config.onWindowDetected.map(\.matcher)
-        let migratedMatchers = migrated.config.onWindowDetected.map(\.matcher)
+        let sourceMatchers = source.config.onWindowDetected.compactMap(\.matcher.legacyOrNil)
+        let migratedMatchers = migrated.config.onWindowDetected.compactMap(\.matcher.legacyOrNil)
         #expect(sourceMatchers.contains { $0.workspace == "fixture-workspace" })
         #expect(sourceMatchers.contains { $0.duringAeroSpaceStartup == true })
         #expect(migratedMatchers.contains { $0.workspace == "fixture-workspace" })
@@ -49,7 +49,7 @@ struct ConfigMigratorTest {
         let source = parseConfig(sourceText)
         #expect(source.errors == [])
         guard source.errors.isEmpty else { return }
-        guard source.config.configVersion == 1 else {
+        guard source.config.configVersion == ._1 else {
             print("Migration dry run diff: skipped; source is already config-version \(source.config.configVersion)")
             return // AEROSPACE_MIGRATION_DRY_RUN must point to an effective config-version 1 file
         }
@@ -126,7 +126,7 @@ struct ConfigMigratorTest {
     @Test func testMigrateRejectsAnInvalidSource() {
         assertEquals(
             ConfigMigrator.migrate(text: "config-version = 0\n", from: 1, to: 2),
-            .failure(.invalidSource(["config-version: Must be in [1, 2] range"])),
+            .failure(.invalidSource(["[ERROR] config-version: config-version must be in [1, 2] range"])),
         )
     }
 
@@ -330,5 +330,11 @@ struct ConfigMigratorTest {
         let sourceBlocks = TomlBlockDocument(sourceText).blocks.filter { !migrationOwnedKeys.contains($0.name ?? "") }
         let candidateBlocks = TomlBlockDocument(candidateText).blocks.filter { !migrationOwnedKeys.contains($0.name ?? "") }
         #expect(candidateBlocks == sourceBlocks, "A non-migration TOML block changed or moved", sourceLocation: sourceLocation)
+    }
+}
+
+extension WindowDetectedCallbackMatcher {
+    fileprivate var legacyOrNil: LegacyWindowDetectedCallbackMatcher? {
+        if case .legacy(let matcher) = self { matcher } else { nil }
     }
 }

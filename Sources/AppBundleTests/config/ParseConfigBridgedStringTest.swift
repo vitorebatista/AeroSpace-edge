@@ -15,7 +15,7 @@ struct ParseConfigBridgedStringTest {
         // lazily and stays non-contiguous, which is the representation that used to crash.
         let bridged = NSString(string: "# ünïcödé\nstart-at-login = true\n") as String
         // Sanity check that this really is the pathological representation the crash needed.
-        assertNil(unsafe bridged.utf8.withContiguousStorageIfAvailable { _ in () })
+        assertNil(bridged.utf8.withContiguousStorageIfAvailable { _ in () })
 
         let (config, errors) = parseConfigTuple(bridged)
         assertEquals(errors, [])

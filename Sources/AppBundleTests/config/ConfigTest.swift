@@ -461,8 +461,8 @@ struct ConfigTest {
             ),
             WindowDetectedCallback( // 8
                 matcher: .legacy(LegacyWindowDetectedCallbackMatcher(
-                    appIdRegexSubstring: CaseInsensitiveRegex.new("^com\\.apple\\..+$").getOrNil(),
-                    appNameRegexSubstring: CaseInsensitiveRegex.new("settings").getOrNil(),
+                    appIdRegexSubstring: CaseInsensitiveRegex.new("^com\\.apple\\..+$").getIgnoringErrorsOrNil(),
+                    appNameRegexSubstring: CaseInsensitiveRegex.new("settings").getIgnoringErrorsOrNil(),
                 )),
                 rawRun: .empty,
             ),
@@ -550,7 +550,7 @@ struct ConfigTest {
                 run = ['move-node-to-workspace 3']
             """,
         )
-        assertEquals(errors.map { $0.description(.error) }, ["[ERROR] on-window-detected[0].if.app-id[1]: Expected type is \'string\'. But actual type is \'int\'"])
+        assertEquals(errors.map { $0.description(.error) }, ["[ERROR] on-window-detected[0].if.app-id[1]: Expected type is \'String\'. But actual type is \'Int\'"])
     }
 
     @Test func testTomlParser() {

@@ -6,7 +6,7 @@ import Testing
 @Suite(.serializedGlobally)
 struct NativeFocusTest {
     @Test func testPreCancelledJobRunsNoActions() {
-        let job = RunLoopJob()
+        let job = RunLoopJob(.cancellable)
         job.cancel()
         var actions: [String] = []
 
@@ -23,7 +23,7 @@ struct NativeFocusTest {
     }
 
     @Test func testCancellationDuringSetMainSkipsRaiseAndActivate() {
-        let job = RunLoopJob()
+        let job = RunLoopJob(.cancellable)
         var actions: [String] = []
 
         assertCancellation {
@@ -42,7 +42,7 @@ struct NativeFocusTest {
     }
 
     @Test func testCancellationDuringRaiseSkipsActivate() {
-        let job = RunLoopJob()
+        let job = RunLoopJob(.cancellable)
         var actions: [String] = []
 
         assertCancellation {
@@ -61,7 +61,7 @@ struct NativeFocusTest {
     }
 
     @Test func testUncancelledJobRunsActionsOnceInOrder() throws {
-        let job = RunLoopJob()
+        let job = RunLoopJob(.cancellable)
         var actions: [String] = []
 
         try performNativeFocus(
@@ -75,8 +75,8 @@ struct NativeFocusTest {
     }
 
     @Test func testSupersededJobStopsAndNewJobCompletes() throws {
-        let firstJob = RunLoopJob()
-        let secondJob = RunLoopJob()
+        let firstJob = RunLoopJob(.cancellable)
+        let secondJob = RunLoopJob(.cancellable)
         var actions: [String] = []
 
         assertCancellation {

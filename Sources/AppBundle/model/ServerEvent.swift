@@ -52,11 +52,11 @@ public struct ServerEvent: Codable, Sendable {
         ServerEvent(_event: .workspaceLayoutChanged, workspace: workspace, layout: layout)
     }
 
-    public static func windowMovedToWorkspace(windowId: UInt32, workspace: String, prevWorkspace: String?) -> ServerEvent {
+    public static func windowMovedToWorkspace(windowId: OpaqueWindowId, workspace: String, prevWorkspace: String?) -> ServerEvent {
         ServerEvent(_event: .windowMovedToWorkspace, windowId: windowId, workspace: workspace, prevWorkspace: prevWorkspace)
     }
 
-    public static func windowClosed(windowId: UInt32, workspace: String?) -> ServerEvent {
+    public static func windowClosed(windowId: OpaqueWindowId, workspace: String?) -> ServerEvent {
         ServerEvent(_event: .windowClosed, windowId: windowId, workspace: workspace)
     }
 }

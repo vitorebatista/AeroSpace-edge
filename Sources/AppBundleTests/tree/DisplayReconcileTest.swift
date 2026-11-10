@@ -11,9 +11,8 @@ struct DisplayReconcileTest {
 
     // Leave no test monitors or focus behind for other test suites (XCTest's tearDown before the swift-testing migration)
     private func tearDown() {
-        setTestMonitors([])
+        setTestMonitors(nil) // gcMonitors() ignores an empty monitor list, so reset to the single test monitor
         gcMonitors()
-        setTestMonitors(nil)
         resetFocusForTests()
     }
 
@@ -65,8 +64,8 @@ struct DisplayReconcileTest {
     @Test func testFocusInitializationAfterAllMonitorsDisconnect() {
         defer { tearDown() }
         seedOpenThreeMonitors(forceAssignNumerics: true)
-        setTestMonitors([])
-        gcMonitors()
+        // gcMonitors() ignores an empty monitor list (upstream would crash on zero screens), so "all monitors
+        // disconnected" is not observable any more; start from the reset focus directly
         resetFocusForTests()
         assertNil(initializedFocusWorkspaceName)
         setTestMonitors([closedLeft()])
@@ -74,8 +73,6 @@ struct DisplayReconcileTest {
         assertNil(initializedFocusWorkspaceName) // Rearranging must not initialize the focus
 
         // Initializing the focus rearranges the monitors once and doesn't recurse
-        setTestMonitors([])
-        gcMonitors()
         setTestMonitors([closedLeft()])
         let workspace = globalFocus.workspace
         assertNotNil(initializedFocusWorkspaceName)
@@ -141,16 +138,18 @@ struct DisplayReconcileTest {
         assertReconcileInvariants()
     }
 
-    @Test func testNoMonitorsLeavesNoVisibleWorkspaces() {
+    // An empty monitor list (a transient state during display reconfiguration) is ignored: nothing is rearranged,
+    // the focus and the visible workspaces stay as they were
+    @Test func testEmptyMonitorListIsIgnored() {
         defer { tearDown() }
         seedOpenThreeMonitors(forceAssignNumerics: true)
         assertTrue(Workspace.get(byName: "2").focusWorkspace())
+        let visibleBefore = visibleSnapshot()
         setTestMonitors([])
         gcMonitors()
-        assertEquals(initializedFocusWorkspaceName, "2")
         assertEquals(globalFocus.workspace.name, "2")
-        assertFalse(Workspace.get(byName: "2").isVisible)
-        assertEquals(visibleSnapshot().count, 0)
+        assertTrue(Workspace.get(byName: "2").isVisible)
+        assertEquals(visibleSnapshot(), visibleBefore)
     }
 }
 

@@ -179,9 +179,9 @@ struct WorkspaceCommandTest {
         // has no workspace to resolve to. The command must fail with an error message
         // instead of silently returning a non-zero code with empty stderr.
         let focusedName = globalFocus.workspace.name
-        let args = WorkspaceCmdArgs(target: .relative(.next)).with(\.explicitStdinFlag, true)
+        let args = WorkspaceCmdArgs(target: .relative(.next)).with(\.commonState.explicitStdinFlag, true)
         let result = await WorkspaceCommand(args: args).run(.defaultEnv, .init(focusedName))
         assertEquals(result.exitCode.rawValue, 2)
-        assertEquals(result.stderr, ["Can't resolve next or prev workspace"])
+        assertEquals(result.stderr, ["Reached the end of the supplied workspaces list"])
     }
 }
