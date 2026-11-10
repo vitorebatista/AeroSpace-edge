@@ -249,7 +249,7 @@ struct SettingsView: View {
                 }
             }
             HStack {
-                Button("Check for Updates…") { Task { await runCheckForUpdatesFlow() } }
+                Button("Check for Updates…") { Task.startUnstructured { await runCheckForUpdatesFlow() } }
                     .disabled(model.isSaving)
                 if model.willCreateConfig {
                     Text("Saving will create ~/\(configDotfileName)").font(.caption).foregroundStyle(.secondary)
@@ -297,7 +297,7 @@ struct SettingsView: View {
     }
 
     private func beginSave() {
-        Task { await model.save() }
+        Task.startUnstructured { await model.save() }
     }
 
     /// `SettingsModel.save()` validates against a temp file and its error message embeds

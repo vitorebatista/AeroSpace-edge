@@ -75,7 +75,7 @@ struct SettingsRawSection: View {
 /// always reports the same thing.
 @MainActor
 func parseRawSectionFragment(preamble: String, text: String) -> Result<Void, String> {
-    let (_, errors) = parseConfig(preamble + text)
+    let errors = parseConfig(preamble + text).errorMessages // warnings don't make a fragment invalid
     return errors.isEmpty ? .success(()) : .failure(errors.joined(separator: "\n\n"))
 }
 

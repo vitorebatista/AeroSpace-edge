@@ -19,6 +19,11 @@ enum SettingsStatus: Equatable {
     case saved
 }
 
+private struct SettingsReloadError: LocalizedError {
+    let message: String
+    var errorDescription: String? { message }
+}
+
 private struct SettingsCandidateWriteError: LocalizedError {
     let underlying: any Error
     let targetMayHaveChanged: Bool
@@ -144,7 +149,11 @@ public final class SettingsModel: ObservableObject {
         // when the config is a symlink (`attributesOfItem` does not follow one).
         loadedModificationDate = willCreateConfig ? nil : writeUrl.flatMap(modificationDate(of:))
 
-        let (config, errors) = parseConfig(text)
+        // Only errors drop the form: upstream warnings (e.g. an outdated config-version) don't stop AeroSpace
+        // loading the config, so they don't stop the Settings window editing it either.
+        let parsed = parseConfig(text)
+        let config = parsed.config
+        let errors = parsed.errorMessages
         if errors.isEmpty {
             // `parseConfig` expands `[exec]` into the full environment, which is not
             // writable back. Recover the file's own `[exec]` values instead.
@@ -194,7 +203,9 @@ public final class SettingsModel: ObservableObject {
                     migration = migrated
 
                     let migratedDocument = TomlBlockDocument(migrated.text)
-                    let (migratedConfig, errors) = parseConfig(migrated.text)
+                    let migratedParse = parseConfig(migrated.text)
+                    let migratedConfig = migratedParse.config
+                    let errors = migratedParse.errorMessages
                     guard errors.isEmpty else {
                         status = .error(errors.joined(separator: "\n\n"))
                         return
@@ -234,7 +245,8 @@ public final class SettingsModel: ObservableObject {
             return
         }
 
-        switch readConfig(forceConfigUrl: tempUrl) {
+        // Errors block the save; warnings don't (the reload below accepts them too, and the menu bar shows them)
+        switch readConfig(forceConfigUrl: tempUrl).asResult {
             case .failure(let message):
                 status = .error(message)
                 return
@@ -383,9 +395,17 @@ public final class SettingsModel: ObservableObject {
         // Mirror `reloadConfigButton`: a reload swaps the config in, and the windows only
         // pick up the new gaps/normalization once a refresh session relays them out.
         if let token: RunSessionGuard = .isServerEnabled {
-            try await runLightSession(.menuBarButton, token) { _ = try await reloadConfig() }
+            try await runLightSession(.menuBarButton, token) { try await reloadConfigOrThrow() }
         } else {
-            _ = try await reloadConfig()
+            try await reloadConfigOrThrow()
+        }
+    }
+
+    /// Warnings don't fail the reload (`isOk` only counts errors unless `--warnings-as-errors` is passed)
+    private static func reloadConfigOrThrow() async throws {
+        let result = await reloadConfig_nonCancellable()
+        if !result.isOk {
+            throw SettingsReloadError(message: result.stdout)
         }
     }
 
