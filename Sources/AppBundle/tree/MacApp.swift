@@ -183,7 +183,7 @@ final class MacApp: AbstractApp {
             // Scoped to the just-focused-a-moment-ago window only, since that one is guaranteed
             // to have been on the active Space - a blanket AXWindows/tracked-set intersection
             // would not be (see windowsAttr's doc comment).
-            guard isMissingFromLiveAxWindows(previousFocusedWindowId, in: axApp.get(Ax.windowsAttr) ?? []) else {
+            guard isMissingFromLiveAxWindows(previousFocusedWindowId, in: readAxWindows(axApp)) else {
                 return (focusedWindow.windowId, nil)
             }
             windows.threadGuarded.removeValue(forKey: previousFocusedWindowId)
@@ -392,19 +392,20 @@ final class MacApp: AbstractApp {
     }
 
     @MainActor
-    static func refreshAllAndGetAliveWindowIds(frontmostAppBundleId: String?) async throws -> [MacApp: [UInt32]] {
+    static func refreshAllAndGetAliveWindowIds(frontmostAppBundleId: String?) async throws -> (mapping: [MacApp: [UInt32]], incomplete: Bool) {
         for (_, app) in MacApp.allAppsMap { // gc dead apps
             try checkCancellation()
             if app.nsApp.isTerminated {
                 await app.destroy()
             }
         }
-        return try await withThrowingTaskGroup(of: (pid_t, [UInt32]).self, returning: [MacApp: [UInt32]].self) { group in
+        return try await withThrowingTaskGroup(of: (pid_t, [UInt32], Bool).self, returning: ([MacApp: [UInt32]], Bool).self) { group in
             func refreshTheApp(_ nsApp: NSRunningApplication) {
                 group.addTask { @Sendable @MainActor in
-                    guard let app = try await MacApp.getOrRegister(nsApp) else { return (nsApp.processIdentifier, []) }
+                    guard let app = try await MacApp.getOrRegister(nsApp) else { return (nsApp.processIdentifier, [], false) }
+                    let (windowIds, incomplete) = try await app.refreshAndGetAliveWindowIds(frontmostAppBundleId: frontmostAppBundleId)
                     // app.pid, not nsApp.processIdentifier: they differ for apps reported with pid -1 (see resolveRealPid)
-                    return (app.pid, try await app.refreshAndGetAliveWindowIds(frontmostAppBundleId: frontmostAppBundleId))
+                    return (app.pid, windowIds, incomplete)
                 }
             }
             // Register new apps
@@ -424,28 +425,37 @@ final class MacApp: AbstractApp {
                 }
             }
             var result: [MacApp: [UInt32]] = [:]
-            for try await (pid, windowIds) in group {
+            var anyIncomplete = false
+            for try await (pid, windowIds, incomplete) in group {
                 if let app = MacApp.allAppsMap[pid] {
                     result[app] = windowIds
                 }
+                anyIncomplete = anyIncomplete || incomplete
             }
-            return result
+            return (result, anyIncomplete)
         }
     }
 
-    private func refreshAndGetAliveWindowIds(frontmostAppBundleId: String?) async throws -> [UInt32] {
+    /// `incomplete` is true when the app didn't respond to the window enumeration request in time
+    /// (e.g. the app is busy, or the system is under load during boot). The returned window ids are
+    /// still valid, but new windows of the app may be missing - the caller should schedule a retry.
+    /// https://github.com/nikitabobko/AeroSpace/issues/1615
+    private func refreshAndGetAliveWindowIds(frontmostAppBundleId: String?) async throws -> (windowIds: [UInt32], incomplete: Bool) {
         if nsApp.isTerminated {
             await destroy()
-            return []
+            return ([], false)
         }
-        guard let thread else { return [] }
+        guard let thread else { return ([], false) }
         // Read on this actor before hopping to the dedicated AX thread, same as in getFocusedWindow.
         let staleTabCandidateId = lastNativeFocusedWindowId
-        let (alive, dead) = try await thread.runInLoop { [pid, windows, axApp, staleTabCandidateId] (job) -> ([UInt32], [UInt32]) in
-            guard var alive: [UInt32: AxWindow] = windows.threadGuardedOrNil else { return ([], []) }
-            guard let axApp = axApp.threadGuardedOrNil else { return ([], []) }
+        let (alive, dead, incomplete) = try await thread.runInLoop { [pid, windows, axApp, staleTabCandidateId] (job) -> ([UInt32], [UInt32], Bool) in
+            guard var alive: [UInt32: AxWindow] = windows.threadGuardedOrNil else { return ([], [], false) }
+            guard let axApp = axApp.threadGuardedOrNil else { return ([], [], false) }
             var dead = [UInt32: AxWindow]()
-            let liveWindows = axApp.get(Ax.windowsAttr) ?? []
+            // The app didn't respond to the enumeration request in time. It doesn't mean the app has
+            // no windows - keep the known set, and let the caller schedule a retry
+            let liveWindows = readAxWindows(axApp)
+            var incomplete = liveWindows.isTimedOut
             // Same native-tab-replacement candidate as getFocusedWindow, caught here too so this
             // periodic refresh (which can run before the focus-change notification that normally
             // retires it) doesn't flicker the layout by reporting the stale tab as alive.
@@ -453,7 +463,7 @@ final class MacApp: AbstractApp {
                let staleTabCandidateId,
                alive[staleTabCandidateId] != nil,
                axApp.get(Ax.focusedWindowAttr)?.windowId != staleTabCandidateId,
-               isMissingFromLiveAxWindows(staleTabCandidateId, in: liveWindows),
+               isMissingFromLiveAxWindows(staleTabCandidateId, in: liveWindows), // Never true on a timeout
                let stale = alive.removeValue(forKey: staleTabCandidateId)
             {
                 dead[staleTabCandidateId] = stale
@@ -463,23 +473,31 @@ final class MacApp: AbstractApp {
             if frontmostAppBundleId != lockScreenAppBundleId {
                 (alive, dead) = try alive.partition {
                     try job.checkCancellation()
-                    return $0.value.ax.containingWindowId() != nil
+                    switch $0.value.ax.windowLiveness() {
+                        case .alive: return true
+                        case .dead: return false
+                        case .unknown:
+                            // The app didn't respond in time. Unknown is not dead: reaping windows of a
+                            // merely busy app makes them vanish from the tree and reappear later.
+                            incomplete = true
+                            return true
+                    }
                 }
             }
 
-            for (id, window) in liveWindows {
+            for (id, window) in liveWindows.windowsOrEmpty {
                 try job.checkCancellation()
                 try alive.getOrRegisterAxWindow(windowId: id, window, pid, job)
             }
 
             windows.threadGuarded = alive
-            return (Array(alive.keys), Array(dead.keys))
+            return (Array(alive.keys), Array(dead.keys), incomplete)
         }
         windowsCount = alive.count
         for windowId in dead {
             setFrameJobs.removeValue(forKey: windowId)?.cancel()
         }
-        return alive
+        return (alive, incomplete)
     }
 
     private func destroy() async {
@@ -570,10 +588,38 @@ extension [UInt32: AxWindow] {
     }
 }
 
-// True if `windowId` is missing from the app's live AXWindows list, i.e. a native-tab
-// window it belonged to was replaced by a sibling tab (see getFocusedWindow).
-private func isMissingFromLiveAxWindows(_ windowId: UInt32, in liveWindows: [WindowIdAndAxUiElement]) -> Bool {
-    !liveWindows.contains { $0.windowId == windowId }
+/// The app's AXWindows list, or `.timedOut` when the app didn't respond in time (kAXErrorCannotComplete).
+/// A timeout says nothing about which windows exist. https://github.com/nikitabobko/AeroSpace/issues/1615
+enum AxWindowsRead {
+    case windows([WindowIdAndAxUiElement])
+    case timedOut
+
+    var isTimedOut: Bool {
+        if case .timedOut = self { true } else { false }
+    }
+
+    /// Every other read failure keeps the old `get(...) ?? []` behavior
+    var windowsOrEmpty: [WindowIdAndAxUiElement] {
+        switch self {
+            case .windows(let windows): windows
+            case .timedOut: []
+        }
+    }
+}
+
+private func readAxWindows(_ axApp: AXUIElement) -> AxWindowsRead {
+    let (windows, error) = axApp.getOrError(Ax.windowsAttr)
+    return error == .cannotComplete ? .timedOut : .windows(windows ?? [])
+}
+
+/// True if `windowId` is missing from the app's live AXWindows list, i.e. a native-tab
+/// window it belonged to was replaced by a sibling tab (see getFocusedWindow).
+/// Never true when the read timed out: an unresponsive app's empty answer must not prune a tab
+func isMissingFromLiveAxWindows(_ windowId: UInt32, in liveWindows: AxWindowsRead) -> Bool {
+    switch liveWindows {
+        case .windows(let windows): !windows.contains { $0.windowId == windowId }
+        case .timedOut: false
+    }
 }
 
 private func getAxRect(window: AXUIElement, job: RunLoopJob) throws -> Rect? {
