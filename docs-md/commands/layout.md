@@ -13,6 +13,7 @@ Change layout of the focused window or workspace root to the given layout
 ```synopsis
 aerospace-edge layout [-h|--help] [--window-id <window-id>|--root]
                  (h_tiles|v_tiles|h_accordion|v_accordion|tiles|accordion|horizontal|vertical|tiling|floating|sticky)...
+aerospace-edge layout [-h|--help] --for-next-detected-window (tiling|floating)
 ```
 
 ## Description
@@ -49,6 +50,14 @@ If several arguments are supplied then finds the first argument that doesn’t d
 
       When `enable-normalization-flatten-containers` is enabled and the root has a single nested tiling container as its only child, the next normalization pass will replace the root with the nested container. In that specific tree shape, a `--root` toggle is effectively discarded by the next normalize.
 
+`--for-next-detected-window`
+
+: Don't change the layout of any currently existing window. Instead, schedule the layout change, and apply it to the next window that AeroSpace-edge detects.
+
+  The scheduled layout change is applied both before and after the [on-window-detected callbacks](../guide.md#on-window-detected-callback) are run, so that the callbacks observe the scheduled layout, and so that the scheduled layout wins over the callbacks. It is applied only once. Running `layout --for-next-detected-window` again replaces the previously scheduled layout change.
+
+  When you use this flag, the command permits exactly one `<target-layout>` argument, and `tiling` and `floating` are its only valid values. The flag is incompatible with all the other flags.
+
 ## Examples
 
 - Toggle between `floating` and `tiling` layouts (order of args doesn’t matter):  
@@ -68,3 +77,6 @@ If several arguments are supplied then finds the first argument that doesn’t d
 
 - Toggle "sticky" mode of the focused floating window (show it on all workspaces of its monitor):  
   `aerospace-edge layout sticky`
+
+- Make the next window that opens floating:  
+  `aerospace-edge layout floating --for-next-detected-window`

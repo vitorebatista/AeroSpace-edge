@@ -458,10 +458,31 @@ func tryOnWindowDetected(_ window: Window) async throws {
     switch parent.cases {
         case .tilingContainer, .workspace, .macosMinimizedWindowsContainer,
              .macosFullscreenWindowsContainer, .macosHiddenAppsWindowsContainer:
-            try await onWindowDetected(window)
+            // `layout --for-next-detected-window`: applied once, both before the callbacks (so they observe it) and
+            // after them (so it wins over them)
+            let layout = layoutForNextDetectedWindow
+            layoutForNextDetectedWindow = nil
+            guard let layout else {
+                try await onWindowDetected(window)
+                return
+            }
+            try await applyScheduledLayout(layout, to: window)
+            do {
+                try await onWindowDetected(window)
+            } catch {
+                try await applyScheduledLayout(layout, to: window)
+                throw error
+            }
+            try await applyScheduledLayout(layout, to: window)
         case .macosPopupWindowsContainer:
             break
     }
+}
+
+@MainActor
+private func applyScheduledLayout(_ layout: LayoutCmdArgs.LayoutDescription, to window: Window) async throws {
+    try await LayoutCommand(args: LayoutCmdArgs(rawArgs: [], toggleBetween: [layout]))
+        .run(.defaultEnv.copy(\.windowId, window.windowId), .emptyStdin)
 }
 
 @MainActor
