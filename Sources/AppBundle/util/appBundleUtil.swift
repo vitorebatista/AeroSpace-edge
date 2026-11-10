@@ -99,7 +99,11 @@ extension CGPoint {
 
     var vectorLength: CGFloat { sqrt(x * x + y * y) }
 
-    var monitorApproximation: MonitorInfo { globalUnsortedMonitorInfos.minByOrDie { distance(toOuterFrame: $0.rect) } }
+    // Fork: NSScreen.screens is momentarily empty during display reconfiguration (e.g. lid close with external
+    // displays). Fall back to mainMonitorInfo (which itself falls back to the test monitor) instead of crashing
+    var monitorApproximation: MonitorInfo {
+        globalUnsortedMonitorInfos.min(by: { distance(toOuterFrame: $0.rect) < distance(toOuterFrame: $1.rect) }) ?? mainMonitorInfo
+    }
 }
 
 extension CGFloat {

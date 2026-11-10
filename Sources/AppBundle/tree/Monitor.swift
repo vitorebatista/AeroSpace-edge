@@ -35,11 +35,21 @@ final class Monitor: TreeNode, NonLeafTreeNodeObject {
         $0.forceAssignedMonitorInfo?.rect.topLeftCorner ?? $0.nodeMonitorInfo?.rect.topLeftCorner
     }
     defer {
-        // The nearest-monitor mapping can leave the focused workspace invisible (e.g. when a monitor disconnects)
-        if let focusedWorkspace, let focusedWorkspacePoint, !focusedWorkspace.isVisible,
+        if let focusedWorkspace, let focusedWorkspacePoint,
            let target = pointToMonitor.values.minBy({ ($0.info.rect.topLeftCorner - focusedWorkspacePoint).vectorLength })
         {
-            _ = target.getWorkspacesContainerOrCreate().setVisibleWorkspace(focusedWorkspace)
+            // The nearest-monitor mapping can leave the focused workspace invisible (e.g. when a monitor disconnects),
+            // or, for a force-assigned workspace, visible on a monitor it isn't assigned to (forceAssignWorkspaces
+            // would then hide it on the next refresh). Show it on the monitor it belongs to.
+            let isOnTarget = focusedWorkspace.isVisible &&
+                (focusedWorkspace.forceAssignedMonitorInfo == nil ||
+                    focusedWorkspace.nodeMonitorInfo?.rect.topLeftCorner == target.info.rect.topLeftCorner)
+            if !isOnTarget, target.getWorkspacesContainerOrCreate().setVisibleWorkspace(focusedWorkspace) {
+                // The monitor the focused workspace left must still show a workspace
+                for monitor in pointToMonitor.values {
+                    _ = monitor.getWorkspacesContainerOrCreate().getVisibleWorkspaceOrCreate(parent: monitor)
+                }
+            }
         }
     }
     var newMonitorPoints = newMonitorInfos.grouped(by: { $0.rect.topLeftCorner }).mapValues { $0.singleOrNil().orDie() }
