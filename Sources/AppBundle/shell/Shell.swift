@@ -90,11 +90,12 @@ extension Shell where T == any Command {
     }
 }
 
-// There are 4 entry points for running commands:
+// There are 5 entry points for running commands:
 // 1. config keybindings
 // 2. CLI requests to server
 // 3. on-window-detected callback
 // 4. Tray icon buttons
+// 5. App Intents (Sources/AppBundle/appIntentsBridge.swift, fork)
 extension Shell where T == any Command {
     @MainActor func run(_ env: CmdEnv, _ io: CmdIo) async -> Int32ExitCode {
         switch self {

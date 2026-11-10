@@ -42,7 +42,7 @@ when it hits one of these. Everything not listed sits at the same path in both r
 | `docs/aerospace-<command>.adoc` synopsis | ` ```synopsis ` block in `docs-md/commands/<command>.md` | Regenerate with `./script/generate-cmd-help.sh` (feeds `Sources/Common/cmdHelpGenerated.swift`). Never hand-edit the generated `.swift`. |
 | `docs/index.html`, `docs/util/` | gone (mkdocs builds the site; see `.github/workflows/docs.yml`) | Drop those hunks. |
 | `docs/config-examples/` | same path, symlinked in as `docs-md/config-examples` | Unchanged — apply normally. The symlink exists because mkdocs needs the TOML inside `docs_dir`. |
-| `xcode/` | `project.yml` + `AeroSpace.xcodeproj` (xcodegen) | Project-file hunks don't apply; redo the equivalent in `project.yml`. |
+| `xcode/` | same path since the 2026-11 resync (`xcode/project.yml` + `xcode/AeroSpace.xcodeproj`, xcodegen) | Applies normally, but the fork's `PRODUCT_NAME`/`PRODUCT_BUNDLE_IDENTIFIER` and the `AppIntents.swift` entries must survive; regenerate with `./script/generate.sh`. |
 | — | `dev-docs/superpowers/` (plans + specs), `CHANGELOG-FORK.md`, `dev-docs/fork-maintenance.md`, `AGENTS.md`/`CLAUDE.md`, `.claude/` | Fork-only. Upstream never touches these, so they never conflict. Moved out of `docs/` on 2026-08-30 — old references say `docs/superpowers`. |
 
 Naming diverges too: the app is `AeroSpace-edge.app`, the CLI `aerospace-edge`, the bundle id
@@ -83,8 +83,13 @@ belong to a separate "full resync" milestone, not this skill) rather than portin
 When the candidate set is large, fan out **parallel read-only agents** to triage in batches (each
 agent reads PR diffs/metadata via `gh` and reports a structured verdict) — this is cheap and fast.
 
-### Phase 3 — Backport each item as its own PR
-Per the runbook: branch off `origin/main` (`port/<slug>`), apply the change
+### Phase 3 — Bring the changes in
+**Upstream `main` commits:** since the 2026-11 full resync the fork tracks upstream `main` by merging it
+(`git merge upstream/main` on a `resync/<date>` branch, resolve conflicts with "upstream wins on structure,
+every fork behaviour survives on top", build + test, one PR). Prefer that over cherry-picking individual
+upstream-main commits. **Open (unmerged) upstream PRs** are still backported one by one, as below.
+
+Per the runbook, for each unmerged upstream PR: branch off `origin/main` (`port/<slug>`), apply the change
 (`gh api .../pulls/<N> -H "Accept: application/vnd.github.v3.diff"` + `git apply --3way`, or
 `git cherry-pick <sha>` for upstream-main commits), adapt to fork conventions
 (`-strict-memory-safety`, `.succ`/`.fail(io.err())`/`BinaryExitCode`, data-driven `axDumps` tests,

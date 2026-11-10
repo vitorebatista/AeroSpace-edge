@@ -2,7 +2,8 @@
 
 This fork backports upstream pull requests that are already implemented in
 [nikitabobko/AeroSpace](https://github.com/nikitabobko/AeroSpace) but not yet merged into an
-upstream release. The base for all of these backports is upstream `main` at commit `63e0976b`.
+upstream release. Since the 2026-11 full resync the fork also merges upstream `main` (currently up to
+`0921fb81`); before that, every backport sat on upstream `main` at commit `63e0976b`.
 
 Each entry links the original upstream PR (where all credit belongs) and the corresponding fork
 PR that backports it. This fork is not an official release and is not affiliated with or endorsed
@@ -16,7 +17,7 @@ AeroSpace-edge versions itself independently of upstream, as `1.MINOR[.PATCH]`:
 - **patch** — a fix, docs, or packaging change that adds no new behavior.
 - **major** — reserved for a breaking change to config syntax or the CLI.
 
-The upstream commit this fork is based on (`63e0976b`) is recorded here and in
+The last upstream `main` commit merged into the fork (`0921fb81`) is recorded here and in
 [`dev-docs/fork-maintenance.md`](./dev-docs/fork-maintenance.md) rather than in the version string.
 
 > **Renumbered 2026-08-27.** Releases 1 through 10 were originally published as
@@ -24,6 +25,82 @@ The upstream commit this fork is based on (`63e0976b`) is recorded here and in
 > The old tags are gone, so links to them no longer resolve. The build attached to each release
 > older than 1.10 still reports its original `0.20.3-Beta-fork.N` version string internally —
 > only 1.10 was rebuilt under the new scheme.
+
+## Unreleased: full upstream resync (upstream main @ 0921fb81)
+
+The fork now **tracks upstream `main` through merges**. This release merges every upstream `main`
+commit from the old base `63e0976b` up to `0921fb81` (about 290 commits), instead of picking fixes one
+by one. Policy: upstream wins on structure (names, APIs, file layout, swift-testing); every fork
+feature survives on top of it. See `dev-docs/fork-maintenance.md` for the new sync workflow.
+
+New from upstream:
+- New commands: `echo`, `eval` (with `--stdin`), `run-callback` and `test-not`. Commands accept `--`
+  to end flags.
+- Bindings and callbacks run through upstream's new shell (a hand-written lexer and parser instead of
+  ANTLR).
+- `on-window-detected` takes `if = '<command>'` (any `test …` command). The old table syntax still works
+  and is documented under "Legacy", including the fork's `if.app-id` array and `if.app-id-regex-substring`.
+- `test` uses `=` / `~=` operators. `focus` and `move` take `--fail-if-fullscreen` and
+  `--fail-if-macos-native-fullscreen`. `reload-config` takes `--warnings-as-errors`.
+- Config warnings: non-fatal problems (for example an outdated `config-version`) are reported as
+  warnings. The menu bar shows a warning item and a warning-triangle icon.
+- `layout --root` and `layout --workspace` (upstream's implementation replaces the fork's `--root`),
+  `layout --fail-if-noop`, and `layout` on an empty workspace.
+- `focus-follows-mouse` (`focus-follows-mouse.enabled`). It coexists with the fork's
+  `focus-follows-app-activation`.
+- Native tabs: Finder/Ghostty-style tabs keep their window's tree slot when you switch tabs.
+- `%{window-id-native}`: the WindowServer id. `%{window-id}` is now an opaque, per-process id.
+- An accessibility-permission flow in the menu bar. More window-detection fixes (Emacs child frames,
+  Codex, Wispr Flow, Outlook reminders). The app is built from `xcode/` (xcodegen), and the version is
+  embedded as a Mach-O section instead of generated Swift files. The test suite runs on swift-testing.
+
+Behaviour changes users may notice:
+- **`layout sticky` toggles**: on a window that is already sticky it now turns stickiness off. Before,
+  it was a no-op. `sticky` is rejected with `--root` and with `--for-next-detected-window`.
+- **`layout --root` accepts `--window-id`** (it acts on that window's workspace root). Before, the
+  two flags were mutually exclusive. `layout` exits non-zero on a no-op only with `--fail-if-noop`
+  (upstream breaking change).
+- **The persisted layout format is v3.** On the first launch after upgrading, window placement is
+  not restored, because the v2 file is discarded. The focused workspace is still restored. Later
+  restarts restore placement as before. Windows are matched by WindowServer id first, then by bundle
+  id + title.
+- **The native-tab replacement uses upstream's implementation.** The fork's port of upstream PR
+  #2225 (fork #59) is dropped (see "Dropped" below). Same user-visible fix.
+- The `debug-windows` JSON uses `Aero.windowId_opaque` / `Aero.windowId_native` instead of
+  `Aero.axWindowId`. Server events carry the opaque window id.
+- The Settings window blocks a save only on config *errors*. Warnings don't block it.
+- The `workspace next/prev --stdin` error reads "Reached the end of the supplied workspaces list"
+  (upstream's wording).
+- Building from source needs bash 5 and swiftly (Swift 6.4.2, `.swift-version`).
+
+How fork features were kept on upstream's structure (details in the resync PR):
+- The window-level cache is upstream's async `getWindowLevel` + `.optionAll`, with upstream's latch bug
+  fixed (concurrent callers waited forever) and the fork's once-per-session guard on top.
+- The AX re-subscribe throttle (`shouldThrottleFailedRegistration`) stays on top of upstream's
+  single-attempt registration (`269dc71b`).
+- Display changes: upstream PR #2358 and the #506 recursion fix are re-expressed on upstream's monitor
+  tree node. An empty screen list is ignored instead of crashing, `monitorApproximation` no longer
+  crashes with zero screens, and a focused force-assigned workspace is shown on its assigned monitor.
+- `focused-window-border`, `new-window-prevent-flicker`, binary-tree normalization,
+  `enable-normalization`, `list-windows --sort`, `%{all}`, the orientation format variables,
+  `summon-workspace --when-visible`, `create-implicit-container-or-fail`, floating `resize`, App
+  Intents, the in-app updater, the conflicting-app check, the Settings window and the menu-bar item
+  pinning are all kept.
+
+Dropped fork code (superseded by upstream):
+- The native-tab replacement (fork #59, upstream PR #2225): `takeNativeTabReplacementBinding`,
+  `replacingNativeTabWindowId` and the related helpers, plus `NativeTabWindowReplacementTest`.
+  Upstream's native-tab tombstones fix the same bug.
+- `runCmdSeq` and `Command.isExec` (replaced by upstream `Shell.run`; the App Intents bridge checks
+  for `exec-and-forget` itself). The fork's `isUnitTest` cache (replaced by upstream's init-time flag).
+- The fork's `layout --root` implementation and its `--root`/`--window-id` conflict.
+- The fork's Emacs child-frame `isDialogHeuristic` override. Upstream classifies those frames as
+  popups in `isWindowHeuristic`, with the same result.
+- The ANTLR shell parser, `versionGenerated.swift` / `gitHashGenerated.swift`, the asciidoc docs and
+  the root `project.yml` / `AeroSpace.xcodeproj` (now under `xcode/`).
+- Tests: about a dozen fork tests that duplicate upstream's (`layout --root`,
+  `--for-next-detected-window`, balance-sizes nesting, workspace next/prev) or encode the dropped
+  mechanisms. Every other fork test was converted to swift-testing.
 
 ## v1.17 (2026-11-09)
 

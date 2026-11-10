@@ -37,7 +37,7 @@ By default, the command acts on the focused window’s parent container. With `-
 
 `--root`
 
-: Act on the focused workspace’s root tiling container instead of the focused window’s parent container. Succeeds even when no window is focused (the command operates on the root container directly), so it works on empty or floating-only workspaces. The `tiling` and `floating` descriptors are not valid with `--root` because they describe window placement modes, not container layouts. `--root` is mutually exclusive with `--window-id`.
+: Act on the focused workspace’s root tiling container instead of the focused window’s parent container. Succeeds even when no window is focused (the command operates on the root container directly), so it works on empty or floating-only workspaces. The `tiling`, `floating` and `sticky` descriptors are not valid with `--root` because they describe window modes, not container layouts. Combined with `--window-id`, `--root` acts on the root tiling container of that window’s workspace; combined with `--workspace`, on the root tiling container of that workspace.
 
   !!! note
 
@@ -65,7 +65,7 @@ By default, the command acts on the focused window’s parent container. With `-
   - `tiles|accordion` - Change tiling layout but preserve orientation
   - `horizontal|vertical` - Change orientation but preserve layout
   - `tiling|floating` - Toggle between floating/tiling mode (not valid with `--root`)
-  - `sticky` - Toggle "sticky" mode of a floating window (a sticky floating window is shown on all workspaces of its monitor)
+  - `sticky` - Toggle "sticky" mode of a floating window (a sticky floating window is shown on all workspaces of its monitor). Running it on a window that is already sticky makes it non-sticky again. Not valid with `--root` or `--for-next-detected-window`
 
   If several `<target-layout>` are supplied, then the first one that doesn’t describe the currently active layout is applied.
 
