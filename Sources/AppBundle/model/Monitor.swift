@@ -94,8 +94,14 @@ private let testMonitor = MonitorImpl(
     isMain: true,
 )
 
+/// Replaces the single test monitor, so tests can simulate display configuration changes
+nonisolated(unsafe) var monitorsForTests: [Monitor]? = nil
+
 var mainMonitor: Monitor {
-    if isUnitTest { return testMonitor }
+    if isUnitTest {
+        let monitors = unsafe monitorsForTests ?? [testMonitor]
+        return monitors.first(where: \.isMain) ?? monitors.first ?? testMonitor
+    }
     let screens = NSScreen.screens
     // Fallback: If main screen can't be found (e.g., during display reconfiguration),
     // return screens.first or testMonitor to avoid crash
@@ -106,7 +112,7 @@ var mainMonitor: Monitor {
 
 var monitors: [Monitor] {
     isUnitTest
-        ? [testMonitor]
+        ? unsafe monitorsForTests ?? [testMonitor]
         : NSScreen.screens.enumerated().map { $0.element.toMonitor(monitorAppKitNsScreenScreensId: $0.offset + 1) }
 }
 
