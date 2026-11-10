@@ -200,7 +200,7 @@ struct TomlBlockDocumentTest {
             """
         var doc = TomlBlockDocument(text)
         doc.set(key: "start-at-login", tomlValue: "true")
-        assertEquals(doc.render(), text.replacingOccurrences(of: "start-at-login = false", with: "start-at-login = true"))
+        assertEquals(doc.render(), text.replacing("start-at-login = false", with: "start-at-login = true"))
     }
 
     @Test func testValueSerialisers() {
@@ -261,7 +261,7 @@ struct TomlBlockDocumentTest {
         doc.replaceTable(named: "gaps", with: "[gaps]\ninner.vertical = 9\n")
         assertEquals(
             doc.render(),
-            Self.tablesFixture.replacingOccurrences(of: "inner.vertical = 2", with: "inner.vertical = 9"),
+            Self.tablesFixture.replacing("inner.vertical = 2", with: "inner.vertical = 9"),
         )
     }
 

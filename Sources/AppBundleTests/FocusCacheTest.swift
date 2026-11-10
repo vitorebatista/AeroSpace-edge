@@ -49,11 +49,11 @@ struct FocusCacheTest {
         protection.recordAppActivation(appPid: 42, now: now)
 
         #expect(protection.appActivationDelay(
-                appPid: 42,
-                currentWorkspaceName: "a",
-                nativeWorkspaceName: "b",
-                now: now,
-            ) == NativeFocusRaceProtection.appActivationGraceDuration)
+            appPid: 42,
+            currentWorkspaceName: "a",
+            nativeWorkspaceName: "b",
+            now: now,
+        ) == NativeFocusRaceProtection.appActivationGraceDuration)
         #expect(protection.appActivationDelay(
             appPid: 42,
             currentWorkspaceName: "a",

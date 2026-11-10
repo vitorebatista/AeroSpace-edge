@@ -231,7 +231,7 @@ func optimalHideCorner(monitorRect: Rect, allMonitorRects: [Rect]) -> OptimalHid
     func contains(_ rect: Rect, _ point: CGPoint) -> Int { rect.contains(point) ? 1 : 0 }
     let important = 10
 
-    /// How many OTHER displays the parked body would reach.
+    // How many OTHER displays the parked body would reach.
     func spillCount(_ corner: CGPoint, extendsRight: Bool) -> Int {
         allMonitorRects.count(where: { other in
             guard other.topLeftCorner != monitorRect.topLeftCorner else { return false }

@@ -55,9 +55,9 @@ struct SettingsModelTest {
 
     @Test func testEscapesInABasicStringAreResolved() {
         let raw = SettingsModel.rawExecConfig(from: #"""
-        [exec.env-vars]
-        QUOTED = "a\"b"
-        """#)
+            [exec.env-vars]
+            QUOTED = "a\"b"
+            """#)
         assertEquals(raw.overriddenVars["QUOTED"], #"a"b"#)
     }
 
@@ -178,7 +178,7 @@ struct SettingsModelTest {
         let directory = try makeTemporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
         let target = directory.appending(path: "config.toml")
-        let original = Data(v1Config.replacingOccurrences(of: "\n", with: "\r\n").utf8)
+        let original = Data(v1Config.replacing("\n", with: "\r\n").utf8)
         try original.write(to: target)
         let model = makeModel(
             target: target,

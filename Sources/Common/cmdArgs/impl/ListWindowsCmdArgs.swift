@@ -167,13 +167,13 @@ private func parseSortOptions(input: SubArgParserInput) -> ParsedCliArgs<[SortOp
             if let option = SortOption(rawValue: String(sortStr)) {
                 sortOptions.append(option)
             } else {
-                let validValues = SortOption.allCases.map { $0.rawValue }.joined(separator: ", ")
+                let validValues = SortOption.allCases.lazy.map { $0.rawValue }.joined(separator: ", ")
                 return .fail("Invalid sort option '\(sortStr)'. Valid options: \(validValues)", advanceBy: index + 1)
             }
         }
         return .succ(sortOptions, advanceBy: 1)
     } else {
-        let validValues = SortOption.allCases.map { $0.rawValue }.joined(separator: ", ")
+        let validValues = SortOption.allCases.lazy.map { $0.rawValue }.joined(separator: ", ")
         return .fail("'--sort' requires a value. Valid options: \(validValues)", advanceBy: 0)
     }
 }

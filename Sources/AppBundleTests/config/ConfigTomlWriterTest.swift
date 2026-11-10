@@ -338,7 +338,7 @@ struct ConfigTomlWriterTest {
         ConfigTomlWriter.apply(draft, original: original, to: &document)
 
         let rendered = document.render()
-        assertEquals(rendered, text.replacingOccurrences(of: "start-at-login = false", with: "start-at-login = true"))
+        assertEquals(rendered, text.replacing("start-at-login = false", with: "start-at-login = true"))
         for table in ConfigTomlWriter.regeneratedTables {
             assertEquals(rendered.contains("[\(table)]"), text.contains("[\(table)]"), additionalMsg: table)
         }

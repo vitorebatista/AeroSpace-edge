@@ -151,7 +151,7 @@ private func dumpAppWindowsDebugInfo(_ appBundleId: String, _ io: CmdIo, _ cm: C
         return if running.isEmpty {
             .fail(io.err("No running application with app-bundle-id '\(appBundleId)'"))
         } else {
-            .fail(io.err(running.map {
+            .fail(io.err(running.lazy.map {
                 "Application '\(appBundleId)' (pid=\($0.processIdentifier), activationPolicy=\($0.activationPolicy.prettyDescription)) is running, but it's not registered in AeroSpace"
             }.joined(separator: "\n")))
         }
