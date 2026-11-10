@@ -568,6 +568,14 @@ You can configure environment variables of `exec-*` commands and callbacks (such
       PATH = '/opt/homebrew/bin:/opt/homebrew/sbin:${PATH}'
   ```
 
+  On Intel Macs, Homebrew’s prefix is `/usr/local` ([docs.brew.sh](https://docs.brew.sh/Installation)).
+  That’s why on Intel Macs, AeroSpace-edge additionally prepends `/usr/local/bin:/usr/local/sbin` to the `PATH`:
+
+  ``` toml
+  [exec.env-vars]
+      PATH = '/usr/local/bin:/usr/local/sbin:/opt/homebrew/bin:/opt/homebrew/sbin:${PATH}'
+  ```
+
 ## Tree
 
 AeroSpace stores all windows and containers in a tree. AeroSpace tree tiling model is [inspired by i3](https://i3wm.org/docs/userguide.html#tree).
