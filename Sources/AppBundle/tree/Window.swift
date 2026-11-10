@@ -35,7 +35,14 @@ open class Window: TreeNode, Hashable {
     func getAxSize() async throws -> CGSize? { die("Not implemented") }
     var title: String { get async throws { die("Not implemented") } }
     var isMacosFullscreen: Bool { get async throws { false } }
-    var isMacosMinimized: Bool { get async throws { false } } // todo replace with enum MacOsWindowNativeState { normal, fullscreen, invisible }
+    var isMacosMinimized: Bool { get async throws { false } }
+    var macosWindowNativeState: MacosWindowNativeState {
+        get async throws {
+            if try await isMacosFullscreen { return .nativeFullscreen }
+            if try await isMacosMinimized { return .nativeMinimized }
+            return .normal
+        }
+    }
     var isHiddenInCorner: Bool { die("Not implemented") }
     @MainActor
     func nativeFocus() { die("Not implemented") }
@@ -43,6 +50,12 @@ open class Window: TreeNode, Hashable {
     func getCenter() async throws -> CGPoint? { try await getAxRect()?.center }
 
     func setAxFrame(_ topLeft: CGPoint?, _ size: CGSize?) { die("Not implemented") }
+}
+
+enum MacosWindowNativeState: Sendable {
+    case normal
+    case nativeMinimized
+    case nativeFullscreen
 }
 
 enum LayoutReason: Equatable {

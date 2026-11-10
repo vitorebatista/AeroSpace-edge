@@ -22,9 +22,12 @@ private func validateStillPopups() async throws {
 
 @MainActor
 private func _normalizeLayoutReason(workspace: Workspace, windows: [Window]) async throws {
-    for window in windows {
-        let isMacosFullscreen = try await window.isMacosFullscreen
-        let isMacosMinimized = try await (!isMacosFullscreen).andAsync { @MainActor @Sendable in try await window.isMacosMinimized }
+    // Query all windows concurrently (one AX hop per window, apps answer on their own AX threads), then mutate the
+    // tree sequentially on the main actor as before
+    let states = try await windows.mapConcurrently { try await $0.macosWindowNativeState }
+    for (window, state) in zip(windows, states) {
+        let isMacosFullscreen = state == .nativeFullscreen
+        let isMacosMinimized = state == .nativeMinimized
         let isMacosWindowOfHiddenApp = !isMacosFullscreen && !isMacosMinimized &&
             !config.automaticallyUnhideMacosHiddenApps && window.macAppUnsafe.nsApp.isHidden
         switch window.layoutReason {
