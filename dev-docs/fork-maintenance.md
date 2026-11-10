@@ -24,9 +24,12 @@ Maintainer runbook for the `vitorebatista/AeroSpace-edge` fork. All credit for A
 ## Sync state (update this section every sync)
 
 - **Upstream base commit:** `63e0976b` (the fork branched from upstream `main` here).
-- **Last upstream review point:** upstream `main` @ `c548c7f8`, 59 open upstream PRs, reviewed
-  2026-08-27. New work after this point is what a future sync should look at. (Previous point:
-  `d56e1637`, reviewed 2026-07-18/07-23.) The 2026-08-27 sync found 2 new `main` commits — both
+- **Last upstream review point:** upstream `main` @ `0921fb81`, 115 open upstream PRs (open PRs
+  reviewed up to #2385), reviewed 2026-11-09. New work after this point is what a future sync should
+  look at. The 2026-11-09 sync found about 150 new `main` commits (`c548c7f8..0921fb81`) and about 60
+  new open PRs. It opened fork PRs #77–#94 (see the 2026-11-09 entries in the lists below). Fork PRs
+  #83 and #87 conflict in `MacApp.swift`; resolve by keeping both sides (#83's real `pid` plus #87's
+  three-value return). (Previous point: `c548c7f8`, reviewed 2026-08-27.) The 2026-08-27 sync found 2 new `main` commits — both
   skipped: `c548c7f8` (`Monitor` → `MonitorInfo` rename, part of the "track upstream main" milestone)
   and `ae2aa7aa` (upstream-only PR-labelling CI) — and 17 new open PRs, of which it ported #2244,
   #2232, #2211, #2228 and #2225 as fork PRs #55–#59.
@@ -100,14 +103,18 @@ Maintainer runbook for the `vitorebatista/AeroSpace-edge` fork. All credit for A
 ### Already backported — DO NOT re-port these
 Upstream PRs (by upstream number): 2103, 2081, 2012, 2024, 2098, 2052, 1944, 1926, 1953, 1529,
 2097, 2080, 1156, 2082, 1665, 1708, 1778, 1932, 2085, 1344, 2083, 1349, 2109, 2116, 2107, 2135,
-2162, 2165, 2181, 2167, 2184, 2190, 2188, 2244, 2232, 2211, 2228, 2225.
+2162, 2165, 2181, 2167, 2184, 2190, 2188, 2244, 2232, 2211, 2228, 2225,
+2338, 2385, 2343, 2348, 2310, 2316, 2335, 2299, 2289, 2326, 2355, 2358, 2369, 2359, 2284
+(2026-11-09, fork PRs #77–#93).
 Upstream `main` commits cherry-picked / ported: `19b5999d` (swap MRU), `8b236f1b` (die deadlock),
 `a0f17f88` (parseConfig exception), `82c4a405`+`cb347265` (Codex window detection, fork PR #33),
 `6a2a126d` (workspace next/prev --stdin edge, #34), `dd61a340` (onWorkspaceChanged self-conflicting
 focus, #35), `3e381925` (env-var docs, #36), `cfd4eab2` (menu-bar focus steal, #39), `8c3efca2`
 (accordion floating-insert, #41), `649301b2` (floating unhide-nudge, #42), `dd6b927a`+`1e6ce27e`
 (MacApp AX-destroy-race + wipPids-spin, #43), `4a3aab24`+`d56e1637` (wisprFlow popup detection, #46),
-`0f6b2e78` (ignore kCGNullWindowID, #47), `8413641c` (socket protocol versions handshake, #54).
+`0f6b2e78` (ignore kCGNullWindowID, #47), `8413641c` (socket protocol versions handshake, #54),
+`0921fb81` (macOS 27 menu images, #79), `846f1a22` (concurrent native state/floating rects, #92),
+`d080afe4` (`layout --for-next-detected-window`, #94).
 
 ### Deliberately NOT ported (skip unless explicitly requested)
 - Upstream PR **#2114** "Add sticky window support" — duplicate of our `layout sticky` (PR #2083/#21).
@@ -202,6 +209,26 @@ focus, #35), `3e381925` (env-var docs, #36), `cfd4eab2` (menu-bar focus steal, #
     (`non-empty-workspaces-root-containers-layout-on-startup` → `tiles|accordion|smart` selector).
   - Still-draft: **#2192** (Goodies: add Cyclist), **#2201** (Restore focus after transient dialogs
     close) — revisit when they leave draft.
+- Reviewed 2026-11-09 (`c548c7f8..0921fb81` plus open PRs up to #2385), not ported:
+  - **`main` refactors (full-resync milestone):** the native-tabs work-in-progress chain (1/n..22/n,
+    `45b2c5d9`..`f5630de7`), the monitor-TreeNode chain (`8ba2e4c1`..`c419f4b2`, which includes
+    `58238ba5`), the swift-testing migration (`74fe6426`/`cd5b6f50`), `StrictContinuation`, the
+    `OpaqueWindowId`/`windowId_native` renames, the version-via-Mach-O-section change (`78346bcd`),
+    and the toolchain/CI/release-validation/xcodegen/swiftformat bumps.
+  - **Fixes for bugs the fork doesn't have:** `f337d700` and `a5fee800` (both fix bugs introduced
+    by the refactors above), `80092f30` (already covered by #2211, fork #57).
+  - **Conflicts with fork design:** `be3e58df`, `b686e0f2` and PR **#2368** (getWindowLevel async
+    latch and `.optionAll`; the fork's window-level cache is synchronous and uses
+    `.optionOnScreenOnly` on purpose), `9fce49a3` (pure refactor), `2436c969` (cosmetic).
+  - **Duplicates or superseded:** **#2272** (superseded by #2316), **#2317** (superseded by #2326),
+    **#2281**/**#2324**/**#2342** (same guard as #2228, fork #58), **#2341**/**#2353** (#506
+    monitor recursion, already fixed by fork #64).
+  - **Blocked or risky:** **#2371** (needs the unported focus-follows-mouse code), **#2344**
+    (assumes a single tiling window covers the monitor), **#2339** (about 2k lines of app hiding).
+  - **Features, not requested:** #2248, #2271, #2273, #2279, #2285, #2288, #2290, #2291, #2292,
+    #2293, #2306, #2307, #2319, #2333, #2334, #2336, #2337, #2340, #2352, #2354, #2356, #2360,
+    #2379, #2380, #2381, #2383. Docs/CI/infra: #2286, #2287, #2294, #2304, #2331, #2345, #2364.
+    Drafts: #2278, #2280, #2378. Focus-follows-mouse-only: #2238, #2245.
 - Upstream CI / build-docs / test-infra commits (`e82b4644`/`78e6dd80`/`ebef281e` GH Actions,
   `2f4d5039`, `c28d3469`, `d07cfee4`, `6ec50638`, `e47d5989`, `abd944d7`, `e063e2fe`) — upstream-only
   tooling or docs for skipped features; nothing to port.

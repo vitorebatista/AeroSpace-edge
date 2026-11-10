@@ -25,6 +25,35 @@ The upstream commit this fork is based on (`63e0976b`) is recorded here and in
 > older than 1.10 still reports its original `0.20.3-Beta-fork.N` version string internally —
 > only 1.10 was rebuilt under the new scheme.
 
+## Unreleased: upstream sync 2026-11-09
+
+Backports opened as fork PRs #77–#94 from the upstream sync on 2026-11-09. They ship in the next
+`1.MINOR` release once merged. The fork PRs describe each fork adaptation in detail.
+
+Bug fixes:
+- FL Studio windows were treated as popups ([#2338](https://github.com/nikitabobko/AeroSpace/pull/2338), fork #77).
+- 1Password windows at the pop-up-menu level are no longer managed ([#2385](https://github.com/nikitabobko/AeroSpace/pull/2385), fork #78).
+- Menu-bar style previews in Settings are kept visible on the macOS 27 SDK (upstream `0921fb81`, fork #79).
+- A callback process that fails to start is now reported instead of crashing or being ignored silently ([#2343](https://github.com/nikitabobko/AeroSpace/pull/2343), fork #80).
+- Workspace focus skips empty MRU children ([#2348](https://github.com/nikitabobko/AeroSpace/pull/2348), fork #81).
+- `balance-sizes` resets the closed-windows cache ([#2310](https://github.com/nikitabobko/AeroSpace/pull/2310), fork #82).
+- Apps that NSWorkspace reports with pid -1 are managed correctly ([#2316](https://github.com/nikitabobko/AeroSpace/pull/2316), fork #83).
+- `focus dfs-next/prev` over floating windows: no tree changes in the middle of the command, and windows at equal positions no longer swap focus back and forth ([#2335](https://github.com/nikitabobko/AeroSpace/pull/2335), fork #84).
+- A cancelled native focus job no longer raises its window ([#2299](https://github.com/nikitabobko/AeroSpace/pull/2299), fork #85).
+- An unresponsive app is no longer treated as having no windows, and a timed-out window list never removes a live native tab ([#2326](https://github.com/nikitabobko/AeroSpace/pull/2326), fork #87).
+- The hide corner is chosen from where the parked window body lands ([#2355](https://github.com/nikitabobko/AeroSpace/pull/2355), fork #88).
+- The focused workspace stays visible after monitor changes ([#2358](https://github.com/nikitabobko/AeroSpace/pull/2358), fork #89).
+
+Performance:
+- `focus --window-id` no longer runs `makeFloatingWindowsSeenAsTiling` ([#2289](https://github.com/nikitabobko/AeroSpace/pull/2289), fork #86).
+- AX frame writes are skipped when the window already has the target frame ([#2369](https://github.com/nikitabobko/AeroSpace/pull/2369), fork #90).
+- Tray model updates are skipped when nothing changed ([#2359](https://github.com/nikitabobko/AeroSpace/pull/2359), fork #91).
+- Native window state and floating window rects are queried concurrently (upstream `846f1a22`, fork #92).
+
+Features:
+- `exec` adds the Intel Homebrew prefix to its default PATH on Intel Macs ([#2284](https://github.com/nikitabobko/AeroSpace/pull/2284), fork #93).
+- New flag: `layout --for-next-detected-window` (upstream `d080afe4`, fork #94).
+
 ## v1.16.2 (2026-08-31)
 
 One user-facing fix, no new behavior. Fork-original, no backports.
