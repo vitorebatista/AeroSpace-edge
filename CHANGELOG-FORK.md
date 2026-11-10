@@ -26,7 +26,7 @@ The last upstream `main` commit merged into the fork (`0921fb81`) is recorded he
 > older than 1.10 still reports its original `0.20.3-Beta-fork.N` version string internally —
 > only 1.10 was rebuilt under the new scheme.
 
-## Unreleased: full upstream resync (upstream main @ 0921fb81)
+## v1.18 (2026-11-10): full upstream resync (upstream main @ 0921fb81)
 
 The fork now **tracks upstream `main` through merges**. This release merges every upstream `main`
 commit from the old base `63e0976b` up to `0921fb81` (about 290 commits), instead of picking fixes one
