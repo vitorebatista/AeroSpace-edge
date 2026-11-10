@@ -53,7 +53,7 @@
   "Aero.App.pid" : 55123,
   "Aero.AxIgnored" : "AXChildrenInNavigationOrder, AXChildren, AXRoleDescription",
   "Aero.windowId_native" : 11964,
-  "Aero.AxUiElementWindowType_isDialogHeuristic" : false,
+  "Aero.AxUiElementWindowType_isDialogHeuristic" : true,
   "Aero.AxUiElementWindowType" : "popup",
   "Aero.on-window-detected" : [
 
