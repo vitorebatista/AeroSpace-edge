@@ -17,7 +17,8 @@ public final class TrayMenuModel: ObservableObject {
 @MainActor func updateTrayText() {
     let sortedMonitors = sortedMonitors
     let focus = focus
-    TrayMenuModel.shared.trayText = (activeMode?.takeIf { $0 != mainModeId }?.first.map { "(\($0.uppercased())) " } ?? "") +
+    // @Published notifies even for equal values, invalidating the menu bar and menu body on every refresh session
+    let trayText = (activeMode?.takeIf { $0 != mainModeId }?.first.map { "(\($0.uppercased())) " } ?? "") +
         sortedMonitors
         .map {
             let hasFullscreenWindows = $0.activeWorkspace.allLeafWindowsRecursive.contains { $0.isFullscreen }
@@ -25,6 +26,7 @@ public final class TrayMenuModel: ObservableObject {
             return ($0.activeWorkspace == focus.workspace && sortedMonitors.count > 1 ? "*" : "") + activeWorkspaceName
         }
         .joined(separator: " │ ")
+    if TrayMenuModel.shared.trayText != trayText { TrayMenuModel.shared.trayText = trayText }
     let live: [WorkspaceViewModel] = Workspace.all.map {
         let apps = $0.allLeafWindowsRecursive.map { $0.app.name?.takeIf { !$0.isEmpty } }.filterNotNil().toSet()
         let dash = " - "
@@ -49,7 +51,7 @@ public final class TrayMenuModel: ObservableObject {
     // binding for is missing from the menu until the first time you visit it. Focusing one
     // creates it, exactly as the binding would.
     let liveNames = live.map(\.name).toSet()
-    TrayMenuModel.shared.workspaces = live + workspaceNamesMentionedIn(config)
+    let workspaces = live + workspaceNamesMentionedIn(config)
         .filter { !liveNames.contains($0) }
         .map {
             WorkspaceViewModel(
@@ -61,6 +63,7 @@ public final class TrayMenuModel: ObservableObject {
                 hasFullscreenWindows: false,
             )
         }
+    if TrayMenuModel.shared.workspaces != workspaces { TrayMenuModel.shared.workspaces = workspaces }
     var items = sortedMonitors.map {
         let hasFullscreenWindows = $0.activeWorkspace.allLeafWindowsRecursive.contains { $0.isFullscreen }
         return TrayItem(
@@ -76,7 +79,7 @@ public final class TrayMenuModel: ObservableObject {
     if let mode {
         items.insert(mode, at: 0)
     }
-    TrayMenuModel.shared.trayItems = items
+    if TrayMenuModel.shared.trayItems != items { TrayMenuModel.shared.trayItems = items }
 }
 
 struct WorkspaceViewModel: Hashable {
