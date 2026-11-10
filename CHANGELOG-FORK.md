@@ -25,10 +25,11 @@ The upstream commit this fork is based on (`63e0976b`) is recorded here and in
 > older than 1.10 still reports its original `0.20.3-Beta-fork.N` version string internally —
 > only 1.10 was rebuilt under the new scheme.
 
-## Unreleased: upstream sync 2026-11-09
+## v1.17 (2026-11-09)
 
-Backports opened as fork PRs #77–#94 from the upstream sync on 2026-11-09. They ship in the next
-`1.MINOR` release once merged. The fork PRs describe each fork adaptation in detail.
+Backports from the 2026-11-09 upstream sync (fork PRs #77–#94). Minor release: bug fixes,
+performance work and two small features. The fork PRs describe each fork adaptation in detail.
+Signed with the same certificate as 1.16+, so the Accessibility grant carries over from 1.16.x.
 
 Bug fixes:
 - FL Studio windows were treated as popups ([#2338](https://github.com/nikitabobko/AeroSpace/pull/2338), fork #77).
