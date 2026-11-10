@@ -7,26 +7,25 @@ public struct ListWindowsCmdArgs: CmdArgs {
     /*conforms*/ public var commonState: CmdArgsCommonState
     public static let parser: CmdParser<Self> = .init(
         kind: .listWindows,
-        allowInConfig: false,
         help: list_windows_help_generated,
         flags: [
             "--all": trueBoolFlag(\.allAlias),
 
             // Filtering flags
-            "--focused": trueBoolFlag(\.filteringOptions.focused),
-            "--monitor": ArgParser(\.filteringOptions.monitors, parseMonitorIds),
-            "--workspace": ArgParser(\.filteringOptions.workspaces, parseWorkspaces),
-            "--pid": singleValueSubArgParser(\.filteringOptions.pidFilter, "<pid>") { Int32($0).orFailure("Can't convert to Int32") },
-            "--app-bundle-id": singleValueSubArgParser(\.filteringOptions.appIdFilter, "<app-bundle-id>", Result.success),
+            "--focused": trueBoolFlag(\.filteringFlags.focused),
+            "--monitor": ArgParser(\.filteringFlags.monitors, parseMonitorIds),
+            "--workspace": ArgParser(\.filteringFlags.workspaces, parseWorkspaces),
+            "--pid": singleValueSubArgParser(\.filteringFlags.pidFilter, "<pid>") { Int32($0).toResult("Can't convert to Int32") },
+            "--app-bundle-id": singleValueSubArgParser(\.filteringFlags.appIdFilter, "<app-bundle-id>", Result.success),
 
             // Formatting flags
             "--format": formatParser(\._format, for: .window),
             "--count": trueBoolFlag(\.outputOnlyCount),
             "--json": trueBoolFlag(\.json),
-            "--sort": SubArgParser(\.sort, parseSortOptions),
+            "--sort": ArgParser(\.sort, parseSortOptions),
         ],
         posArgs: [],
-        conflictingOptions: [
+        conflictingFlags: [
             ["--all", "--focused", "--workspace"],
             ["--all", "--focused", "--monitor"],
             ["--count", "--format"],
@@ -36,13 +35,13 @@ public struct ListWindowsCmdArgs: CmdArgs {
 
     fileprivate var allAlias: Bool = false
 
-    public var filteringOptions = FilteringOptions()
+    public var filteringFlags = FilteringFlags()
     public var sort: [SortOption] = [.appName, .windowTitle]
-    public var _format: [StringInterToken] = []
+    public var _format: [InterToken<InterVar>] = []
     public var outputOnlyCount: Bool = false
     public var json: Bool = false
 
-    public struct FilteringOptions: ConvenienceCopyable, Equatable, Sendable {
+    public struct FilteringFlags: Withable, Equatable, Sendable {
         public var monitors: [MonitorId] = []
         public var focused: Bool = false
         public var workspaces: [WorkspaceFilter] = []
@@ -52,15 +51,15 @@ public struct ListWindowsCmdArgs: CmdArgs {
 }
 
 extension ListWindowsCmdArgs {
-    public var format: [StringInterToken] {
+    public var format: [InterToken<InterVar>] {
         if _format.isEmpty {
             return [
-                .interVar("window-id"), .interVar("right-padding"), .literal(" | "),
-                .interVar("app-name"), .interVar("right-padding"), .literal(" | "),
-                .interVar("window-title"),
+                .interVar(.formatVar(.window(.windowId))), .interVar(.plainInterVar(.rightPadding)), .literal(" | "),
+                .interVar(.formatVar(.app(.appName))), .interVar(.plainInterVar(.rightPadding)), .literal(" | "),
+                .interVar(.formatVar(.window(.windowTitle))),
             ]
         }
-        if _format.contains(.interVar(PlainInterVar.all.rawValue)) {
+        if _format.contains(.interVar(.plainInterVar(.all))) {
             return AeroObjKind.window.getFormatWithAllVariable()
         }
         return _format
@@ -71,16 +70,16 @@ func parseListWindowsCmdArgs(_ args: StrArrSlice) -> ParsedCmd<ListWindowsCmdArg
     let args = args.map { $0 == "--app-id" ? "--app-bundle-id" : $0 }.slice // Compatibility
     return parseSpecificCmdArgs(ListWindowsCmdArgs(commonState: .init(args)), args)
         .filter("Mandatory option is not specified (--focused|--all|--monitor|--workspace)") { raw in
-            raw.filteringOptions.focused || raw.allAlias || !raw.filteringOptions.monitors.isEmpty || !raw.filteringOptions.workspaces.isEmpty
+            raw.filteringFlags.focused || raw.allAlias || !raw.filteringFlags.monitors.isEmpty || !raw.filteringFlags.workspaces.isEmpty
         }
         .filter("--all conflicts with \"filtering\" flags. Please use '--monitor all' instead of '--all' alias") { raw in
-            raw.allAlias.implies(raw.filteringOptions == ListWindowsCmdArgs.FilteringOptions())
+            raw.allAlias.implies(raw.filteringFlags == ListWindowsCmdArgs.FilteringFlags())
         }
         .filter("--focused conflicts with other \"filtering\" flags") { raw in
-            raw.filteringOptions.focused.implies(raw.filteringOptions.copy(\.focused, false) == ListWindowsCmdArgs.FilteringOptions())
+            raw.filteringFlags.focused.implies(raw.filteringFlags.with(\.focused, false) == ListWindowsCmdArgs.FilteringFlags())
         }
         .map { raw in
-            raw.allAlias ? raw.copy(\.filteringOptions.monitors, [.all]).copy(\.allAlias, false) : raw // Normalize alias
+            raw.allAlias ? raw.with(\.filteringFlags.monitors, [.all]).with(\.allAlias, false) : raw // Normalize alias
         }
         .flatMap { parsed in
             if parsed.json, let msg = getErrorIfFormatIsIncompatibleWithJson(parsed._format) {
@@ -93,8 +92,8 @@ func parseListWindowsCmdArgs(_ args: StrArrSlice) -> ParsedCmd<ListWindowsCmdArg
         }
 }
 
-func getErrorIfAllFormatVariableIsInvalid(json: Bool, format: [StringInterToken]) -> String? {
-    let hasAllVariable = format.contains(.interVar(PlainInterVar.all.rawValue))
+func getErrorIfAllFormatVariableIsInvalid(json: Bool, format: [InterToken<InterVar>]) -> String? {
+    let hasAllVariable = format.contains(.interVar(.plainInterVar(.all)))
 
     if hasAllVariable {
         // Check if %{all} is mixed with other variables (excluding spaces) first
@@ -121,12 +120,12 @@ func getErrorIfAllFormatVariableIsInvalid(json: Bool, format: [StringInterToken]
 }
 
 func formatParser<Root>(
-    _ keyPath: SendableWritableKeyPath<Root, [StringInterToken]>,
+    _ keyPath: SendableWritableKeyPath<Root, [InterToken<InterVar>]>,
     for kind: AeroObjKind,
-) -> SubArgParser<Root, [StringInterToken]> {
+) -> SubArgParser<Root, [InterToken<InterVar>]> {
     return ArgParser(keyPath) { input in
         if let arg = input.nonFlagArgOrNil() {
-            return switch arg.interpolationTokens(interpolationChar: "%") {
+            return switch arg.interpolationTokens(interpolationChar: "%", ofInterVarType: InterVar.self) {
                 case .success(let tokens): .succ(tokens, advanceBy: 1)
                 case .failure(let err): .fail("Failed to parse <output-format>. \(err)", advanceBy: 1)
             }
@@ -168,13 +167,13 @@ private func parseSortOptions(input: SubArgParserInput) -> ParsedCliArgs<[SortOp
             if let option = SortOption(rawValue: String(sortStr)) {
                 sortOptions.append(option)
             } else {
-                let validValues = SortOption.allCases.map { $0.rawValue }.joined(separator: ", ")
+                let validValues = SortOption.allCases.lazy.map { $0.rawValue }.joined(separator: ", ")
                 return .fail("Invalid sort option '\(sortStr)'. Valid options: \(validValues)", advanceBy: index + 1)
             }
         }
         return .succ(sortOptions, advanceBy: 1)
     } else {
-        let validValues = SortOption.allCases.map { $0.rawValue }.joined(separator: ", ")
+        let validValues = SortOption.allCases.lazy.map { $0.rawValue }.joined(separator: ", ")
         return .fail("'--sort' requires a value. Valid options: \(validValues)", advanceBy: 0)
     }
 }
@@ -196,6 +195,16 @@ public enum FormatVar: RawRepresentable, Equatable, CaseIterable, Sendable {
     case workspace(WorkspaceFormatVar)
     case app(AppFormatVar)
     case monitor(MonitorFormatVar)
+
+    // periphery:ignore
+    private var kind: AeroObjKind {
+        switch self {
+            case .app: .app
+            case .monitor: .monitor
+            case .window: .window
+            case .workspace: .workspace
+        }
+    }
 
     public static var allCases: [FormatVar] {
         AeroObjKind.allCases.flatMap {
@@ -235,6 +244,7 @@ public enum FormatVar: RawRepresentable, Equatable, CaseIterable, Sendable {
 
     public enum WindowFormatVar: String, Equatable, CaseIterable, Sendable {
         case windowId = "window-id"
+        case windowIdNative = "window-id-native"
         case windowIsFullscreen = "window-is-fullscreen"
         case windowTitle = "window-title"
         case windowLayout = "window-layout" // An alias for windowParentContainerLayout
@@ -273,28 +283,62 @@ public enum PlainInterVar: String, CaseIterable, Sendable, Equatable {
     case all = "all"
 }
 
-public enum AeroObjKind: CaseIterable, Sendable {
-    case window, workspace, app, monitor
+public enum InterVar: RawRepresentable, Equatable, CaseIterable, Sendable {
+    case formatVar(FormatVar)
+    case plainInterVar(PlainInterVar)
+
+    private enum Kind: CaseIterable, Equatable, Sendable {
+        case formatVar
+        case plainInterVar
+    }
 
     // periphery:ignore
-    private static func unused(_ it: FormatVar) -> Self {
-        switch it {
-            case .app: .app
-            case .monitor: .monitor
-            case .window: .window
-            case .workspace: .workspace
+    private var kind: Kind {
+        switch self {
+            case .formatVar: .formatVar
+            case .plainInterVar: .plainInterVar
         }
     }
 
-    public func getFormatWithAllVariable() -> [StringInterToken] {
-        return getAvailableInterVars(for: self)
-            .map(StringInterToken.interVar)
-            .filter {
-                ![.interVar(PlainInterVar.rightPadding.rawValue),
-                  .interVar(PlainInterVar.newline.rawValue),
-                  .interVar(PlainInterVar.tab.rawValue),
-                  .interVar(PlainInterVar.all.rawValue)].contains($0)
+    public static var allCases: [InterVar] {
+        Kind.allCases.flatMap { kind in
+            switch kind {
+                case .formatVar: FormatVar.allCases.map(InterVar.formatVar)
+                case .plainInterVar: PlainInterVar.allCases.map(InterVar.plainInterVar)
             }
+        }
+    }
+
+    public init?(rawValue: String) {
+        let this: [Self] = Kind.allCases.map { kind in
+            switch kind {
+                case .formatVar: FormatVar(rawValue: rawValue).map(InterVar.formatVar)
+                case .plainInterVar: PlainInterVar(rawValue: rawValue).map(InterVar.plainInterVar)
+            }
+        }.filterNotNil()
+        switch this.sequencePattern {
+            case .empty: return nil
+            case .one(let it): self = it
+            default: die("Clashed cases: \(this)")
+        }
+    }
+
+    public var rawValue: String {
+        switch self {
+            case .formatVar(let it): it.rawValue
+            case .plainInterVar(let it): it.rawValue
+        }
+    }
+}
+
+public enum AeroObjKind: CaseIterable, Sendable {
+    case window, workspace, app, monitor
+
+    /// Expansion of the '%{all}' format variable: every format variable available for the object kind
+    public func getFormatWithAllVariable() -> [InterToken<InterVar>] {
+        _getAvailableInterVars(for: self)
+            .compactMap(FormatVar.init(rawValue:))
+            .map { .interVar(.formatVar($0)) }
     }
 }
 

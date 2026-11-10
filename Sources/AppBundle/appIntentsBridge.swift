@@ -12,23 +12,24 @@ import Common
 /// surfaces the failure text directly in the Shortcuts UI, so it has to read like a sentence.
 @MainActor
 public func runAeroSpaceCommandFromAppIntent(_ rawCommand: String) async -> Result<String, String> {
-    let command: any Command
-    switch parseCommand(rawCommand) {
-        case .help(let help): return .success(help)
-        case .failure(let err): return .failure(err.msg)
-        case .cmd(let parsed): command = parsed
-    }
     // Same rationale as the socket server: exec-and-forget would turn any Shortcut into arbitrary
     // shell execution routed through us. Shortcuts already ships "Run Shell Script" for that.
-    if command.isExec {
+    if rawCommand.trimmingCharacters(in: .whitespaces).starts(with: "exec-and-forget") {
         return .failure("exec-and-forget is not available from Shortcuts. Use the built-in \"Run Shell Script\" action instead.")
     }
-    guard let token: RunSessionGuard = .isServerEnabled(orIsEnableCommand: command) else {
+    let shell: Shell<any Command>
+    switch parseCommand(rawCommand, allowExecAndForget: false, allowEval: false) {
+        case .help(let help): return .success(help)
+        case .failure(let err): return .failure(err.msg)
+        case .cmd(let parsed): shell = parsed
+    }
+    let singleCommand: (any Command)? = if case .cmd(let it) = shell { it } else { nil }
+    guard let token: RunSessionGuard = .isServerEnabled(orIsEnableCommand: singleCommand) else {
         return .failure("\(aeroSpaceAppName) is disabled and doesn't accept commands. Run '\(aeroSpaceCliName) enable on' to enable it.")
     }
     let result: Result<CmdResult, Error> = await Result {
         try await runLightSession(.appIntent(rawCommand), token) {
-            try await command.run(.defaultEnv, .emptyStdin)
+            await shell.run(.defaultEnv, .emptyStdin)
         }
     }
     switch result {

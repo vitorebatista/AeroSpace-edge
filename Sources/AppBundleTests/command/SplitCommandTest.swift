@@ -1,18 +1,19 @@
 @testable import AppBundle
 import Common
-import XCTest
+import Testing
 
 @MainActor
-final class SplitCommandTest: XCTestCase {
-    override func setUp() async throws { setUpWorkspacesForTests() }
+@Suite(.serializedGlobally)
+struct SplitCommandTest {
+    init() { setUpWorkspacesForTests() }
 
-    func testSplit() async throws {
+    @Test func testSplit() async {
         let root = Workspace.get(byName: name).rootTilingContainer.apply {
             assertEquals(TestWindow.new(id: 1, parent: $0).focusWindow(), true)
             TestWindow.new(id: 2, parent: $0)
         }
 
-        try await SplitCommand(args: SplitCmdArgs(rawArgs: [], .vertical)).run(.defaultEnv, .emptyStdin)
+        await parseCommand("split vertical").cmdOrDie.run(.defaultEnv, .emptyStdin)
         assertEquals(root.layoutDescription, .h_tiles([
             .v_tiles([
                 .window(1),
@@ -21,13 +22,23 @@ final class SplitCommandTest: XCTestCase {
         ]))
     }
 
-    func testSplitOppositeOrientation() async throws {
+    @Test func testSplit_onlyTombstoneSiblings_changesOrientationInstead() async {
+        let root = Workspace.get(byName: name).rootTilingContainer.apply {
+            assertEquals(TestWindow.new(id: 1, parent: $0).focusWindow(), true)
+            TestWindow.new(id: 2, parent: $0).lifeStatus = .dead
+        }
+
+        await parseCommand("split vertical").cmdOrDie.run(.defaultEnv, .emptyStdin)
+        assertEquals(root.layoutDescription, .v_tiles([.window(1), .window(2)]))
+    }
+
+    @Test func testSplitOppositeOrientation() async {
         let root = Workspace.get(byName: name).rootTilingContainer.apply {
             assertEquals(TestWindow.new(id: 1, parent: $0).focusWindow(), true)
             TestWindow.new(id: 2, parent: $0)
         }
 
-        try await SplitCommand(args: SplitCmdArgs(rawArgs: [], .opposite)).run(.defaultEnv, .emptyStdin)
+        await parseCommand("split opposite").cmdOrDie.run(.defaultEnv, .emptyStdin)
         assertEquals(root.layoutDescription, .h_tiles([
             .v_tiles([
                 .window(1),
@@ -36,7 +47,7 @@ final class SplitCommandTest: XCTestCase {
         ]))
     }
 
-    func testChangeOrientation() async throws {
+    @Test func testChangeOrientation() async {
         let root = Workspace.get(byName: name).rootTilingContainer.apply {
             TilingContainer.newVTiles(parent: $0, adaptiveWeight: 1).apply {
                 assertEquals(TestWindow.new(id: 1, parent: $0).focusWindow(), true)
@@ -44,7 +55,7 @@ final class SplitCommandTest: XCTestCase {
             TestWindow.new(id: 2, parent: $0)
         }
 
-        try await SplitCommand(args: SplitCmdArgs(rawArgs: [], .horizontal)).run(.defaultEnv, .emptyStdin)
+        await parseCommand("split horizontal").cmdOrDie.run(.defaultEnv, .emptyStdin)
         assertEquals(root.layoutDescription, .h_tiles([
             .h_tiles([
                 .window(1),
@@ -53,7 +64,7 @@ final class SplitCommandTest: XCTestCase {
         ]))
     }
 
-    func testToggleOrientation() async throws {
+    @Test func testToggleOrientation() async {
         let root = Workspace.get(byName: name).rootTilingContainer.apply {
             TilingContainer.newVTiles(parent: $0, adaptiveWeight: 1).apply {
                 assertEquals(TestWindow.new(id: 1, parent: $0).focusWindow(), true)
@@ -61,7 +72,7 @@ final class SplitCommandTest: XCTestCase {
             TestWindow.new(id: 2, parent: $0)
         }
 
-        try await SplitCommand(args: SplitCmdArgs(rawArgs: [], .opposite)).run(.defaultEnv, .emptyStdin)
+        await parseCommand("split opposite").cmdOrDie.run(.defaultEnv, .emptyStdin)
         assertEquals(root.layoutDescription, .h_tiles([
             .h_tiles([
                 .window(1),
@@ -70,14 +81,14 @@ final class SplitCommandTest: XCTestCase {
         ]))
     }
 
-    func testSplit_globalFlattenOn_refused() async throws {
+    @Test func testSplit_globalFlattenOn_refused() async {
         config.enableNormalizationFlattenContainers = true
         let root = Workspace.get(byName: name).rootTilingContainer.apply {
             assertEquals(TestWindow.new(id: 1, parent: $0).focusWindow(), true)
             TestWindow.new(id: 2, parent: $0)
         }
 
-        let result = try await parseCommand("split vertical").cmdOrDie.run(.defaultEnv, .emptyStdin)
+        let result = await parseCommand("split vertical").cmdOrDie.run(.defaultEnv, .emptyStdin)
         assertEquals(result.exitCode.rawValue, 2)
         assertEquals(root.layoutDescription, .h_tiles([
             .window(1),
@@ -85,7 +96,7 @@ final class SplitCommandTest: XCTestCase {
         ]))
     }
 
-    func testSplit_globalFlattenOn_workspaceOverrideOff_works() async throws {
+    @Test func testSplit_globalFlattenOn_workspaceOverrideOff_works() async {
         config.enableNormalizationFlattenContainers = true
         let workspace = Workspace.get(byName: name)
         workspace.normalizationOverride[.flattenContainers] = false
@@ -94,7 +105,7 @@ final class SplitCommandTest: XCTestCase {
             TestWindow.new(id: 2, parent: $0)
         }
 
-        try await parseCommand("split vertical").cmdOrDie.run(.defaultEnv, .emptyStdin)
+        await parseCommand("split vertical").cmdOrDie.run(.defaultEnv, .emptyStdin)
         assertEquals(root.layoutDescription, .h_tiles([
             .v_tiles([
                 .window(1),
@@ -103,7 +114,7 @@ final class SplitCommandTest: XCTestCase {
         ]))
     }
 
-    func testSplit_globalFlattenOff_workspaceOverrideOn_refused() async throws {
+    @Test func testSplit_globalFlattenOff_workspaceOverrideOn_refused() async {
         let workspace = Workspace.get(byName: name)
         workspace.normalizationOverride[.flattenContainers] = true
         let root = workspace.rootTilingContainer.apply {
@@ -111,9 +122,9 @@ final class SplitCommandTest: XCTestCase {
             TestWindow.new(id: 2, parent: $0)
         }
 
-        let result = try await parseCommand("split vertical").cmdOrDie.run(.defaultEnv, .emptyStdin)
+        let result = await parseCommand("split vertical").cmdOrDie.run(.defaultEnv, .emptyStdin)
         assertEquals(result.exitCode.rawValue, 2)
-        XCTAssertFalse(result.stderr.isEmpty, "refusal must be reported on stderr")
+        #expect(!result.stderr.isEmpty, "refusal must be reported on stderr")
         // The tip must target the workspace the refusal was computed from, which
         // is not necessarily the focused one.
         assertTrue(result.stderr.joined(separator: "\n").contains("--workspace \(workspace.name)"))

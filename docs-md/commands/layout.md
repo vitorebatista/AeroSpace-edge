@@ -1,36 +1,25 @@
 ---
 title: layout
-description: Change layout of the focused window or workspace root to the given layout
+description: Change layout of the focused node to the given layout
 section: 1
 ---
 
 # aerospace-edge layout
 
-Change layout of the focused window or workspace root to the given layout
+Change layout of the focused node to the given layout
 
 ## Synopsis
 
 ```synopsis
-aerospace-edge layout [-h|--help] [--window-id <window-id>|--root]
-                 (h_tiles|v_tiles|h_accordion|v_accordion|tiles|accordion|horizontal|vertical|tiling|floating|sticky)...
+aerospace-edge layout [-h|--help] [--window-id <window-id>|--workspace <workspace>]
+                 [--root] [--fail-if-noop]
+                 (<target-layout>)...
 aerospace-edge layout [-h|--help] --for-next-detected-window (tiling|floating)
 ```
 
 ## Description
 
 By default, the command acts on the focused window’s parent container. With `--root`, the command acts on the workspace’s root tiling container instead, which lets you toggle the workspace-level layout without flattening nested sub-containers.
-
-If several arguments are supplied then finds the first argument that doesn’t describe the currently active layout, and applies the layout.
-
-- Change both tiling layout and orientation in one go: `h_tiles|v_tiles|h_accordion|v_accordion`
-
-- Change tiling layout but preserve orientation: `tiles|accordion`
-
-- Change orientation but preserve layout: `horizontal|vertical`
-
-- Toggle floating/tiling mode: `tiling|floating` (not valid with `--root`)
-
-- Toggle "sticky" mode of a floating window: `sticky` (a sticky floating window is shown on all workspaces of its monitor)
 
 ## Options
 
@@ -42,13 +31,21 @@ If several arguments are supplied then finds the first argument that doesn’t d
 
 : Act on the specified window instead of the focused window. The flag takes precedence over `AEROSPACE_WINDOW_ID` and `AEROSPACE_WORKSPACE` [environment variables](../guide.md#environment-variables).
 
+`--workspace <workspace>`
+
+: Act on the specified workspace instead of the focused workspace. The flag takes precedence over `AEROSPACE_WINDOW_ID` and `AEROSPACE_WORKSPACE` [environment variables](../guide.md#environment-variables). Requires `--root`.
+
 `--root`
 
-: Act on the focused workspace’s root tiling container instead of the focused window’s parent container. Succeeds even when no window is focused (the command operates on the root container directly), so it works on empty or floating-only workspaces. The `tiling` and `floating` descriptors are not valid with `--root` because they describe window placement modes, not container layouts. `--root` is mutually exclusive with `--window-id`.
+: Act on the focused workspace’s root tiling container instead of the focused window’s parent container. Succeeds even when no window is focused (the command operates on the root container directly), so it works on empty or floating-only workspaces. The `tiling`, `floating` and `sticky` descriptors are not valid with `--root` because they describe window modes, not container layouts. Combined with `--window-id`, `--root` acts on the root tiling container of that window’s workspace; combined with `--workspace`, on the root tiling container of that workspace.
 
   !!! note
 
       When `enable-normalization-flatten-containers` is enabled and the root has a single nested tiling container as its only child, the next normalization pass will replace the root with the nested container. In that specific tree shape, a `--root` toggle is effectively discarded by the next normalize.
+
+`--fail-if-noop`
+
+: Exit with non-zero exit code if already in the requested layout. When you use this flag, the command permits only one `<target-layout>` argument.
 
 `--for-next-detected-window`
 
@@ -57,6 +54,20 @@ If several arguments are supplied then finds the first argument that doesn’t d
   The scheduled layout change is applied both before and after the [on-window-detected callbacks](../guide.md#on-window-detected-callback) are run, so that the callbacks observe the scheduled layout, and so that the scheduled layout wins over the callbacks. It is applied only once. Running `layout --for-next-detected-window` again replaces the previously scheduled layout change.
 
   When you use this flag, the command permits exactly one `<target-layout>` argument, and `tiling` and `floating` are its only valid values. The flag is incompatible with all the other flags.
+
+## Arguments
+
+`<target-layout>`
+
+: Possible values:
+
+  - `h_tiles|v_tiles|h_accordion|v_accordion` - Change both tiling layout and orientation in one go
+  - `tiles|accordion` - Change tiling layout but preserve orientation
+  - `horizontal|vertical` - Change orientation but preserve layout
+  - `tiling|floating` - Toggle between floating/tiling mode (not valid with `--root`)
+  - `sticky` - Toggle "sticky" mode of a floating window (a sticky floating window is shown on all workspaces of its monitor). Running it on a window that is already sticky makes it non-sticky again. Not valid with `--root` or `--for-next-detected-window`
+
+  If several `<target-layout>` are supplied, then the first one that doesn’t describe the currently active layout is applied.
 
 ## Examples
 

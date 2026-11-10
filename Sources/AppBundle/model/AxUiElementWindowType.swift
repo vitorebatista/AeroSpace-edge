@@ -17,10 +17,6 @@ enum AxUiElementWindowType: String {
 
 // Covered by tests in ./axDumps in the repo root
 extension AxUiElementMock {
-    private func isEmacsFloatingChildFrame(_ id: KnownBundleId?) -> Bool {
-        id == .emacs && get(Ax.subroleAttr) == kAXFloatingWindowSubrole
-    }
-
     // 'isDialogHeuristic' function name is referenced in the guide
     func isDialogHeuristic(
         _ id: KnownBundleId?,
@@ -34,12 +30,6 @@ extension AxUiElementMock {
 
         if id == .iphonesimulator {
             return true
-        }
-
-        // Emacs child frames (posframe, lsp-ui-doc, etc.) are regular windows from AX
-        // perspective, but they are transient UI surfaces that should stay unmanaged.
-        if isEmacsFloatingChildFrame(id) {
-            return false
         }
 
         // Don't tile:
@@ -115,7 +105,7 @@ extension AxUiElementMock {
         _ windowLevel: MacOsWindowLevel?,
     ) -> Bool {
         if windowLevel != .normalWindow &&
-            // Slowly roll out windowLevel for applications for which we have the appropriate dumps
+            // todo: Slowly roll out windowLevel for applications for which we have the appropriate dumps
             (id == .slack || id == .chrome || id?.isFirefox == true || id == .braveBrowser || id == .screenstudio || id == .cleanshotx || id == .iterm2 || id == .outlook || id == .codex || id == .wisprFlow)
         {
             return false
@@ -148,10 +138,6 @@ extension AxUiElementMock {
             return false
         }
 
-        if isEmacsFloatingChildFrame(id) {
-            return false
-        }
-
         lazy var fullscreenButton = get(Ax.fullscreenButtonAttr)
 
         if id == .xcode && get(Ax.identifierAttr) == "open_quickly" {
@@ -163,6 +149,13 @@ extension AxUiElementMock {
         }
 
         if activationPolicy == .accessory && get(Ax.closeButtonAttr) == nil && id != .steam {
+            return false
+        }
+
+        // Emacs child frames (posframes, corfu completion popups, etc.)
+        // These are transient UI elements that should not be managed as windows.
+        // https://github.com/nikitabobko/AeroSpace/issues/776
+        if id == .emacs && get(Ax.subroleAttr) == kAXFloatingWindowSubrole {
             return false
         }
 
@@ -190,7 +183,7 @@ extension AxUiElementMock {
 
             get(Ax.isFocused) == true ||  // 3 different ways to detect if the window is focused
             get(Ax.isMainAttr) == true ||
-            axApp.get(Ax.focusedWindowAttr)?.windowId == self.containingWindowId() ||
+            axApp.get(Ax.focusedWindowAttr)?.windowId == self.containingNativeWindowId() ||
 
             get(Ax.subroleAttr) == kAXStandardWindowSubrole
     }
@@ -211,7 +204,7 @@ extension AxUiElementMock {
 
             get(Ax.isFocused) == false &&  // Three different ways to detect if the window is not focused
             get(Ax.isMainAttr) == false &&
-            axApp.get(Ax.focusedWindowAttr)?.windowId != containingWindowId() &&
+            axApp.get(Ax.focusedWindowAttr)?.windowId != containingNativeWindowId() &&
 
             subrole != kAXStandardWindowSubrole &&
             // Share window purple "pill" indicator has "Window" title https://github.com/nikitabobko/AeroSpace/issues/1101

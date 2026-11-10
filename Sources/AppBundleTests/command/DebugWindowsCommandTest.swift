@@ -1,20 +1,21 @@
 @testable import AppBundle
 import Common
-import XCTest
+import Testing
 
 @MainActor
-final class DebugWindowsCommandTest: XCTestCase {
-    override func setUp() async throws { setUpWorkspacesForTests() }
+@Suite(.serializedGlobally)
+struct DebugWindowsCommandTest {
+    init() { setUpWorkspacesForTests() }
 
-    func testParse() {
-        testParseCommandSucc("debug-windows", DebugWindowsCmdArgs(rawArgs: []))
-        testParseCommandSucc(
+    @Test func testParse() {
+        testParseSingleCommandSucc("debug-windows", DebugWindowsCmdArgs(rawArgs: []))
+        testParseSingleCommandSucc(
             "debug-windows --window-id 42",
-            DebugWindowsCmdArgs(rawArgs: []).copy(\.windowId, 42),
+            DebugWindowsCmdArgs(rawArgs: []).with(\.windowId, 42),
         )
-        testParseCommandSucc(
+        testParseSingleCommandSucc(
             "debug-windows --app-bundle-id com.example.app",
-            DebugWindowsCmdArgs(rawArgs: []).copy(\.appBundleId, "com.example.app"),
+            DebugWindowsCmdArgs(rawArgs: []).with(\.appBundleId, "com.example.app"),
         )
     }
 }

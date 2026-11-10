@@ -19,7 +19,7 @@ struct WorkspaceCommand: Command {
                     stdin: args.useStdin ? io.readStdin() : nil,
                     target: target,
                 )
-                guard let workspace else { return .fail(io.err("Can't resolve next or prev workspace")) }
+                guard let workspace = workspace.getOrNil(appendErrorTo: &io.stderr) else { return .fail }
                 workspaceName = workspace.name
             case .direct(let name):
                 workspaceName = name.raw
@@ -44,24 +44,33 @@ struct WorkspaceCommand: Command {
     }
 }
 
-@MainActor func getNextPrevWorkspace(current: Workspace, isNext: Bool, wrapAround: Bool, stdin: String?, target: LiveFocus) -> Workspace? {
-    let stdinWorkspaces: [String] = stdin?.split(separator: "\n").map { String($0).trim() }.filter { !$0.isEmpty } ?? []
-    let currentMonitor = current.workspaceMonitor
-    let workspaces: [Workspace] = stdin != nil
-        ? stdinWorkspaces.map { Workspace.get(byName: $0) }
-        : Workspace.all.filter { $0.workspaceMonitor.rect.topLeftCorner == currentMonitor.rect.topLeftCorner }
-            .toSet()
-            .union([current])
-            .sorted()
-    // When the current workspace isn't in the list, default to index 0 so that `next`/`prev`
-    // land on the first listed workspace rather than skipping past it (firstIndex ?? 0, then
-    // ±1, would land on index 1 for `next`).
-    let index = workspaces.firstIndex(where: { $0 == target.workspace })
-        .map { isNext ? $0 + 1 : $0 - 1 }
-        ?? 0
-    let workspace: Workspace? = switch wrapAround {
-        case true: workspaces.get(wrappingIndex: index)
-        case false: workspaces.getOrNil(atIndex: index)
+@MainActor func getNextPrevWorkspace(current: Workspace, isNext: Bool, wrapAround: Bool, stdin: String?, target: LiveFocus) -> ResOrStr<Workspace> {
+    Result { () throws(String) in
+        let stdinWorkspaces: [WorkspaceName] = try stdin?.split(whereSeparator: \.isWhitespace)
+            .map { String($0).trim() }
+            .filter { !$0.isEmpty }
+            .mapAllOrFailure(WorkspaceName.parse)
+            .get()
+            ?? []
+        let currentMonitor = current.workspaceMonitorInfo
+        let workspaces: [Workspace] = stdin != nil
+            ? stdinWorkspaces.map { Workspace.get(byName: $0.raw) }
+            : Workspace.all.filter { $0.workspaceMonitorInfo.rect.topLeftCorner == currentMonitor.rect.topLeftCorner }
+                .toSet()
+                .union([current])
+                .sorted()
+        if workspaces.isEmpty { throw "The list of workspaces is empty" }
+        let index = workspaces.firstIndex(where: { $0 == target.workspace })
+            .map { index in isNext ? index + 1 : index - 1 }
+            ?? 0
+        return wrapAround
+            ? try workspaces.get(wrappingIndex: index).toResult("List of workspaces is empty").get()
+            : try workspaces.getOrNil(atIndex: index)
+                .toResult(
+                    index >= workspaces.count
+                        ? "Reached the end of the supplied workspaces list"
+                        : "Rached the beginning of the supplied workspaces list",
+                )
+                .get()
     }
-    return workspace
 }

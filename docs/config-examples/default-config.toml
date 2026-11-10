@@ -2,6 +2,7 @@
 # After that, you can edit ~/.aerospace-edge.toml to your liking
 
 # Config version for compatibility and deprecations
+# See: https://vitorebatista.github.io/AeroSpace-edge/guide/#config-version
 # Fallback value (if you omit the key): config-version = 1
 config-version = 2
 
@@ -98,12 +99,13 @@ persistent-workspaces = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "A", "B",
 # A callback that runs every time binding mode changes
 # See: https://vitorebatista.github.io/AeroSpace-edge/guide/#binding-modes
 # See: https://vitorebatista.github.io/AeroSpace-edge/commands/mode/
-on-mode-changed = []
+on-mode-changed = ""
+
+focus-follows-mouse.enabled = false
 
 # Possible values: (qwerty|dvorak|colemak)
 # See https://vitorebatista.github.io/AeroSpace-edge/guide/#key-mapping
-[key-mapping]
-    preset = 'qwerty'
+key-mapping.preset = 'qwerty'
 
 # Gaps between windows (inner-*) and between monitor edges (outer-*).
 # Possible values:
@@ -113,13 +115,12 @@ on-mode-changed = []
 #                 Monitor pattern is the same as for 'workspace-to-monitor-force-assignment'.
 #                 See:
 #                 https://vitorebatista.github.io/AeroSpace-edge/guide/#assign-workspaces-to-monitors
-[gaps]
-    inner.horizontal = 0
-    inner.vertical =   0
-    outer.left =       0
-    outer.bottom =     0
-    outer.top =        0
-    outer.right =      0
+gaps.inner.horizontal = 0
+gaps.inner.vertical =   0
+gaps.outer.left =       0
+gaps.outer.bottom =     0
+gaps.outer.top =        0
+gaps.outer.right =      0
 
 # 'main' binding mode declaration
 # See: https://vitorebatista.github.io/AeroSpace-edge/guide/#binding-modes
@@ -147,12 +148,8 @@ on-mode-changed = []
     # See: https://vitorebatista.github.io/AeroSpace-edge/commands/exec-and-forget/
     # You can uncomment the following lines to open up terminal with alt + enter shortcut
     # (like in i3)
-    # alt-enter = '''exec-and-forget osascript -e '
-    # tell application "Terminal"
-    #     do script
-    #     activate
-    # end tell'
-    # '''
+    # alt-enter = '''exec-and-forget osascript -e \
+    # 'tell application "Terminal" to tell (do script) to activate' '''
 
     # See: https://vitorebatista.github.io/AeroSpace-edge/commands/layout/
     alt-slash = 'layout tiles horizontal vertical'

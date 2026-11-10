@@ -1,22 +1,23 @@
 @testable import AppBundle
 import Common
-import XCTest
+import Testing
 
 @MainActor
-final class ResizeCommandTest: XCTestCase {
-    override func setUp() async throws { setUpWorkspacesForTests() }
+@Suite(.serializedGlobally)
+struct ResizeCommandTest {
+    init() { setUpWorkspacesForTests() }
 
-    func testParseCommand() {
-        testParseCommandSucc("resize smart +10", ResizeCmdArgs(rawArgs: [], dimension: .smart, units: .add(10)))
-        testParseCommandSucc("resize smart -10", ResizeCmdArgs(rawArgs: [], dimension: .smart, units: .subtract(10)))
-        testParseCommandSucc("resize smart 10", ResizeCmdArgs(rawArgs: [], dimension: .smart, units: .set(10)))
+    @Test func testParseCommand() {
+        testParseSingleCommandSucc("resize smart +10", ResizeCmdArgs(rawArgs: [], dimension: .smart, units: .add(10)))
+        testParseSingleCommandSucc("resize smart -10", ResizeCmdArgs(rawArgs: [], dimension: .smart, units: .subtract(10)))
+        testParseSingleCommandSucc("resize smart 10", ResizeCmdArgs(rawArgs: [], dimension: .smart, units: .set(10)))
 
-        testParseCommandSucc("resize smart-opposite +10", ResizeCmdArgs(rawArgs: [], dimension: .smartOpposite, units: .add(10)))
-        testParseCommandSucc("resize smart-opposite -10", ResizeCmdArgs(rawArgs: [], dimension: .smartOpposite, units: .subtract(10)))
-        testParseCommandSucc("resize smart-opposite 10", ResizeCmdArgs(rawArgs: [], dimension: .smartOpposite, units: .set(10)))
+        testParseSingleCommandSucc("resize smart-opposite +10", ResizeCmdArgs(rawArgs: [], dimension: .smartOpposite, units: .add(10)))
+        testParseSingleCommandSucc("resize smart-opposite -10", ResizeCmdArgs(rawArgs: [], dimension: .smartOpposite, units: .subtract(10)))
+        testParseSingleCommandSucc("resize smart-opposite 10", ResizeCmdArgs(rawArgs: [], dimension: .smartOpposite, units: .set(10)))
 
-        testParseCommandSucc("resize height 10", ResizeCmdArgs(rawArgs: [], dimension: .height, units: .set(10)))
-        testParseCommandSucc("resize width 10", ResizeCmdArgs(rawArgs: [], dimension: .width, units: .set(10)))
+        testParseSingleCommandSucc("resize height 10", ResizeCmdArgs(rawArgs: [], dimension: .height, units: .set(10)))
+        testParseSingleCommandSucc("resize width 10", ResizeCmdArgs(rawArgs: [], dimension: .width, units: .set(10)))
 
         testParseCommandFail("resize s 10", msg: """
             ERROR: Can't parse 's'.
@@ -25,24 +26,230 @@ final class ResizeCommandTest: XCTestCase {
         testParseCommandFail("resize smart foo", msg: "ERROR: <number> argument must be a number", exitCode: 2)
     }
 
+    @Test func testWidthAdd_growsTargetShrinksSiblings() async {
+        var window1: Window!
+        var window2: Window!
+        var window3: Window!
+        Workspace.get(byName: name).rootTilingContainer.apply {
+            window1 = TestWindow.new(id: 1, parent: $0, adaptiveWeight: 4)
+            window2 = TestWindow.new(id: 2, parent: $0, adaptiveWeight: 4)
+            window3 = TestWindow.new(id: 3, parent: $0, adaptiveWeight: 4)
+        }
+        _ = window1.focusWindow()
+
+        await parseCommand("resize width +2").cmdOrDie.run(.defaultEnv, .emptyStdin)
+        // diff = +2, childDiff = 2 / (3 - 1) = 1
+        assertEquals(window1.hWeight, 6)
+        assertEquals(window2.hWeight, 3)
+        assertEquals(window3.hWeight, 3)
+    }
+
+    @Test func testWidthSubtract_shrinksTargetGrowsSiblings() async {
+        var window1: Window!
+        var window2: Window!
+        var window3: Window!
+        Workspace.get(byName: name).rootTilingContainer.apply {
+            window1 = TestWindow.new(id: 1, parent: $0, adaptiveWeight: 4)
+            window2 = TestWindow.new(id: 2, parent: $0, adaptiveWeight: 4)
+            window3 = TestWindow.new(id: 3, parent: $0, adaptiveWeight: 4)
+        }
+        _ = window1.focusWindow()
+
+        await parseCommand("resize width -2").cmdOrDie.run(.defaultEnv, .emptyStdin)
+        // diff = -2, childDiff = -1
+        assertEquals(window1.hWeight, 2)
+        assertEquals(window2.hWeight, 5)
+        assertEquals(window3.hWeight, 5)
+    }
+
+    @Test func testWidthSet_diffIsAbsoluteMinusCurrent() async {
+        var window1: Window!
+        var window2: Window!
+        var window3: Window!
+        Workspace.get(byName: name).rootTilingContainer.apply {
+            window1 = TestWindow.new(id: 1, parent: $0, adaptiveWeight: 4)
+            window2 = TestWindow.new(id: 2, parent: $0, adaptiveWeight: 4)
+            window3 = TestWindow.new(id: 3, parent: $0, adaptiveWeight: 4)
+        }
+        _ = window1.focusWindow()
+
+        await parseCommand("resize width 6").cmdOrDie.run(.defaultEnv, .emptyStdin)
+        // diff = 6 - 4 = 2, childDiff = 1
+        assertEquals(window1.hWeight, 6)
+        assertEquals(window2.hWeight, 3)
+        assertEquals(window3.hWeight, 3)
+    }
+
+    @Test func testWidthAdd_skipsTombstones() async {
+        var window1: Window!
+        var window2: Window!
+        var window3: Window!
+        var invisibleWindow: Window!
+        var deadContainer: TilingContainer!
+        Workspace.get(byName: name).rootTilingContainer.apply {
+            window1 = TestWindow.new(id: 1, parent: $0, adaptiveWeight: 4)
+            invisibleWindow = TestWindow.new(id: 2, parent: $0, adaptiveWeight: 4).apply { $0.lifeStatus = .invisible }
+            window2 = TestWindow.new(id: 3, parent: $0, adaptiveWeight: 4)
+            deadContainer = TilingContainer.newVTiles(parent: $0, adaptiveWeight: 4).apply {
+                TestWindow.new(id: 4, parent: $0).lifeStatus = .dead
+                $0.lifeStatus = .deadOrInvisible
+            }
+            window3 = TestWindow.new(id: 5, parent: $0, adaptiveWeight: 4)
+        }
+        _ = window1.focusWindow()
+
+        await parseCommand("resize width +2").cmdOrDie.run(.defaultEnv, .emptyStdin)
+        // diff = +2, childDiff = 2 / (3 visible - 1) = 1
+        assertEquals(window1.hWeight, 6)
+        assertEquals(window2.hWeight, 3)
+        assertEquals(window3.hWeight, 3)
+        assertEquals(invisibleWindow.hWeight, 4)
+        assertEquals(deadContainer.hWeight, 4)
+    }
+
+    @Test func testWidthAdd_parentIsMustBeFlattened_resizesInAliveAncestor() async {
+        var window1: Window!
+        var window2: Window!
+        var window3: Window!
+        var mustBeFlattened: TilingContainer!
+        Workspace.get(byName: name).rootTilingContainer.apply {
+            window1 = TestWindow.new(id: 1, parent: $0, adaptiveWeight: 4)
+            mustBeFlattened = TilingContainer.newHTiles(parent: $0, adaptiveWeight: 4).apply {
+                TestWindow.new(id: 2, parent: $0, adaptiveWeight: 4).lifeStatus = .dead
+                window2 = TestWindow.new(id: 3, parent: $0, adaptiveWeight: 4)
+                $0.lifeStatus = .mustBeFlattened
+            }
+            window3 = TestWindow.new(id: 4, parent: $0, adaptiveWeight: 4)
+        }
+        _ = window2.focusWindow()
+
+        let result = await parseCommand("resize width +2").cmdOrDie.run(.defaultEnv, .emptyStdin)
+        assertEquals(result.exitCode.rawValue, 0)
+        // diff = +2 applied to the mustBeFlattened container in the root, childDiff = 2 / (3 visible - 1) = 1
+        assertEquals(mustBeFlattened.hWeight, 6)
+        assertEquals(window1.hWeight, 3)
+        assertEquals(window3.hWeight, 3)
+        assertEquals(window2.hWeight, 4)
+    }
+
+    @Test func testSingleInhabitedChildParent_failsCleanly() async {
+        var window1: Window!
+        var invisibleWindow: Window!
+        Workspace.get(byName: name).rootTilingContainer.apply {
+            window1 = TestWindow.new(id: 1, parent: $0, adaptiveWeight: 4)
+            invisibleWindow = TestWindow.new(id: 2, parent: $0, adaptiveWeight: 4).apply { $0.lifeStatus = .invisible }
+        }
+        _ = window1.focusWindow()
+
+        let result = await parseCommand("resize width +2").cmdOrDie.run(.defaultEnv, .emptyStdin)
+        assertEquals(result.exitCode.rawValue, 2)
+        assertEquals(window1.hWeight, 4)
+        assertEquals(invisibleWindow.hWeight, 4)
+    }
+
+    @Test func testHeight_climbsToVerticalAncestor() async {
+        // Root is horizontal; height must locate the nested vertical tile container.
+        var window1: Window!
+        var window2: Window!
+        Workspace.get(byName: name).rootTilingContainer.apply {
+            TestWindow.new(id: 0, parent: $0)
+            TilingContainer.newVTiles(parent: $0, adaptiveWeight: 1).apply {
+                window1 = TestWindow.new(id: 1, parent: $0, adaptiveWeight: 4)
+                window2 = TestWindow.new(id: 2, parent: $0, adaptiveWeight: 4)
+            }
+        }
+        _ = window1.focusWindow()
+
+        await parseCommand("resize height +2").cmdOrDie.run(.defaultEnv, .emptyStdin)
+        // diff = +2, childDiff = 2 / (2 - 1) = 2
+        assertEquals(window1.vWeight, 6)
+        assertEquals(window2.vWeight, 2)
+    }
+
+    @Test func testSmart_usesImmediateParentOrientation() async {
+        // .smart resizes along the immediate tile container's axis, even when an ancestor
+        // would also qualify.
+        var window1: Window!
+        var window2: Window!
+        var sibling: Window!
+        Workspace.get(byName: name).rootTilingContainer.apply {
+            TilingContainer.newVTiles(parent: $0, adaptiveWeight: 4).apply {
+                window1 = TestWindow.new(id: 1, parent: $0, adaptiveWeight: 4)
+                window2 = TestWindow.new(id: 2, parent: $0, adaptiveWeight: 4)
+            }
+            sibling = TestWindow.new(id: 3, parent: $0, adaptiveWeight: 4)
+        }
+        _ = window1.focusWindow()
+
+        await parseCommand("resize smart +2").cmdOrDie.run(.defaultEnv, .emptyStdin)
+        // immediate parent is vertical; resize is along .v
+        assertEquals(window1.vWeight, 6)
+        assertEquals(window2.vWeight, 2)
+        // The horizontal sibling at the root is untouched.
+        assertEquals(sibling.hWeight, 4)
+    }
+
+    @Test func testSmartOpposite_resizesAncestorContainer() async {
+        // .smart-opposite resolves to the opposite axis (.h here) and climbs to the
+        // ancestor tile container with that orientation. That ancestor's child — the
+        // intermediate vertical container — is the node that gets resized.
+        var verticalContainer: TilingContainer!
+        var sibling: Window!
+        var inner: Window!
+        Workspace.get(byName: name).rootTilingContainer.apply {
+            verticalContainer = TilingContainer.newVTiles(parent: $0, adaptiveWeight: 4).apply {
+                inner = TestWindow.new(id: 1, parent: $0)
+                TestWindow.new(id: 2, parent: $0)
+            }
+            sibling = TestWindow.new(id: 3, parent: $0, adaptiveWeight: 4)
+        }
+        _ = inner.focusWindow()
+
+        await parseCommand("resize smart-opposite +2").cmdOrDie.run(.defaultEnv, .emptyStdin)
+        // diff = +2 along .h; root has 2 children, childDiff = 2
+        assertEquals(verticalContainer.hWeight, 6)
+        assertEquals(sibling.hWeight, 2)
+    }
+
+    @Test func testHeight_noVerticalAncestor_returnsFail() async {
+        // Root is horizontal; with no vertical container present, height has nothing to resize.
+        Workspace.get(byName: name).rootTilingContainer.apply {
+            assertEquals(TestWindow.new(id: 1, parent: $0).focusWindow(), true)
+            TestWindow.new(id: 2, parent: $0)
+        }
+
+        let result = await parseCommand("resize height +2").cmdOrDie.run(.defaultEnv, .emptyStdin)
+        assertEquals(result.exitCode.rawValue, 2)
+    }
+
+    @Test func testSingleChildParent_failsCleanly() async {
+        // The root has only one tiling child; dividing the diff across 0 siblings must fail.
+        Workspace.get(byName: name).rootTilingContainer.apply {
+            assertEquals(TestWindow.new(id: 1, parent: $0, adaptiveWeight: 4).focusWindow(), true)
+        }
+
+        let result = await parseCommand("resize width +2").cmdOrDie.run(.defaultEnv, .emptyStdin)
+        assertEquals(result.exitCode.rawValue, 2)
+    }
+
     // MARK: - Floating window resize
 
-    /// Helper: create a focused floating window (parent is the workspace) with a known rect.
+    /// Helper: create a focused floating window (parent is the workspace floating container) with a known rect.
     private func newFocusedFloatingWindow(rect: Rect) -> (Workspace, TestWindow) {
         let workspace = Workspace.get(byName: name)
         assertEquals(workspace.focusWorkspace(), true)
-        let window = TestWindow.new(id: 1, parent: workspace, rect: rect)
+        let window = TestWindow.new(id: 1, parent: workspace.floatingWindowsContainer, rect: rect)
         assertEquals(window.isFloating, true)
         assertEquals(window.focusWindow(), true)
         return (workspace, window)
     }
 
-    func testFloating_addWidth_growsAndRecenters() async throws {
+    @Test func testFloating_addWidth_growsAndRecenters() async throws {
         let (_, window) = newFocusedFloatingWindow(rect: Rect(topLeftX: 100, topLeftY: 100, width: 200, height: 200))
-        let result = try await ResizeCommand(args: ResizeCmdArgs(rawArgs: [], dimension: .width, units: .add(100)))
+        let result = await ResizeCommand(args: ResizeCmdArgs(rawArgs: [], dimension: .width, units: .add(100)))
             .run(.defaultEnv, .emptyStdin)
         assertEquals(result.exitCode.rawValue, 0)
-        let rect = try await window.getAxRect().orDie()
+        let rect = try await window.getAxRect(.nonCancellable).orDie()
         // newX = max(0, 100 - 100/2) = 50, newY unchanged, width grows by 100.
         assertEquals(rect.topLeftX, 50)
         assertEquals(rect.topLeftY, 100)
@@ -50,24 +257,24 @@ final class ResizeCommandTest: XCTestCase {
         assertEquals(rect.height, 200)
     }
 
-    func testFloating_addHeight_growsAndRecenters() async throws {
+    @Test func testFloating_addHeight_growsAndRecenters() async throws {
         let (_, window) = newFocusedFloatingWindow(rect: Rect(topLeftX: 100, topLeftY: 100, width: 200, height: 200))
-        let result = try await ResizeCommand(args: ResizeCmdArgs(rawArgs: [], dimension: .height, units: .add(100)))
+        let result = await ResizeCommand(args: ResizeCmdArgs(rawArgs: [], dimension: .height, units: .add(100)))
             .run(.defaultEnv, .emptyStdin)
         assertEquals(result.exitCode.rawValue, 0)
-        let rect = try await window.getAxRect().orDie()
+        let rect = try await window.getAxRect(.nonCancellable).orDie()
         assertEquals(rect.topLeftX, 100)
         assertEquals(rect.topLeftY, 50)
         assertEquals(rect.width, 200)
         assertEquals(rect.height, 300)
     }
 
-    func testFloating_setWidth_shrinks() async throws {
+    @Test func testFloating_setWidth_shrinks() async throws {
         let (_, window) = newFocusedFloatingWindow(rect: Rect(topLeftX: 100, topLeftY: 100, width: 200, height: 200))
-        let result = try await ResizeCommand(args: ResizeCmdArgs(rawArgs: [], dimension: .width, units: .set(100)))
+        let result = await ResizeCommand(args: ResizeCmdArgs(rawArgs: [], dimension: .width, units: .set(100)))
             .run(.defaultEnv, .emptyStdin)
         assertEquals(result.exitCode.rawValue, 0)
-        let rect = try await window.getAxRect().orDie()
+        let rect = try await window.getAxRect(.nonCancellable).orDie()
         // diff = 100 - 200 = -100, diffSize = (-100, 0). newX = max(0, 100 - (-100)/2) = 150.
         assertEquals(rect.topLeftX, 150)
         assertEquals(rect.topLeftY, 100)
@@ -75,28 +282,28 @@ final class ResizeCommandTest: XCTestCase {
         assertEquals(rect.height, 200)
     }
 
-    func testFloating_addWidth_clampsToMonitorRightEdge() async throws {
+    @Test func testFloating_addWidth_clampsToMonitorRightEdge() async throws {
         // Window near the right edge: topLeftX + width + diff/2 exceeds monitor width (1920),
         // so newX is pinned to keep the grown window inside the monitor.
         let (_, window) = newFocusedFloatingWindow(rect: Rect(topLeftX: 1800, topLeftY: 100, width: 100, height: 100))
-        let result = try await ResizeCommand(args: ResizeCmdArgs(rawArgs: [], dimension: .width, units: .add(100)))
+        let result = await ResizeCommand(args: ResizeCmdArgs(rawArgs: [], dimension: .width, units: .add(100)))
             .run(.defaultEnv, .emptyStdin)
         assertEquals(result.exitCode.rawValue, 0)
-        let rect = try await window.getAxRect().orDie()
+        let rect = try await window.getAxRect(.nonCancellable).orDie()
         // 1800 + 100 + 50 = 1950 > 1920 -> newX = max(0, 1920 - 100 - 100) = 1720.
         assertEquals(rect.topLeftX, 1720)
         assertEquals(rect.width, 200)
     }
 
-    func testFloating_addHeight_clampsToMonitorBottomEdge() async throws {
+    @Test func testFloating_addHeight_clampsToMonitorBottomEdge() async throws {
         // Window near the bottom edge of the monitor (maxY = 1080): growing height would push
         // topLeftY + height + diff/2 below the monitor, so newY is pinned to keep the grown
         // window inside the monitor.
         let (_, window) = newFocusedFloatingWindow(rect: Rect(topLeftX: 100, topLeftY: 1000, width: 200, height: 100))
-        let result = try await ResizeCommand(args: ResizeCmdArgs(rawArgs: [], dimension: .height, units: .add(100)))
+        let result = await ResizeCommand(args: ResizeCmdArgs(rawArgs: [], dimension: .height, units: .add(100)))
             .run(.defaultEnv, .emptyStdin)
         assertEquals(result.exitCode.rawValue, 0)
-        let rect = try await window.getAxRect().orDie()
+        let rect = try await window.getAxRect(.nonCancellable).orDie()
         // 1000 + 100 + 50 = 1150 > 1080 -> newY = max(0, 1080 - 100 - 100) = 880.
         // newX is unaffected (width fits), so it stays recentered at 100.
         assertEquals(rect.topLeftX, 100)

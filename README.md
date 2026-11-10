@@ -279,7 +279,7 @@ this fork is settled.
 
 ```bash
 ./script/build-debug.sh -Xswiftc -warnings-as-errors   # warnings are errors
-./script/swift-test.sh                                  # XCTest suite
+./script/swift-test.sh                                  # swift-testing suite
 ./script/test.sh                                        # everything CI runs
 ```
 
@@ -293,13 +293,13 @@ release script needs docs tooling that isn't required here.
 | | Ventura 13 | Sonoma 14 | Sequoia 15 | Tahoe 26 |
 |---|:---:|:---:|:---:|:---:|
 | Release binary runs | ✅ | ✅ | ✅ | ✅ |
-| Debug build from source | — | ✅ | ✅ | ✅ |
-| Release build from source (Xcode 26+) | — | — | ✅ | ✅ |
+| Build from source (debug or release, Xcode 26+) | — | — | ✅ | ✅ |
 | Verified by CI on every commit | — | — | ✅ | ✅ |
 
-Nothing above changes what the app supports — the deployment target is macOS 13. The last row is
-only about what GitHub Actions can still run: it never offered a macOS 13 runner, and it
-[retires the macOS 14 one on 2026-11-02](https://github.com/actions/runner-images/issues/13518).
+Nothing above changes what the app supports — the deployment target is macOS 13. Building from
+source is only guaranteed where CI builds: GitHub Actions never offered a macOS 13 runner, and it
+[retired the macOS 14 one on 2026-11-02](https://github.com/actions/runner-images/issues/13518), so
+macOS 15 is the minimum build host (as upstream).
 
 ## Credit
 

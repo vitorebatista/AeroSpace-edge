@@ -108,7 +108,7 @@ Please see the following config samples:
 
 - [Search for configs by other users on GitHub](https://github.com/search?q=path%3A*aerospace.toml&type=code) for inspiration
 
-AeroSpace uses TOML format for the config. TOML is easy to read, and it supports comments. See [TOML spec for more info](https://toml.io/en/v1.0.0)
+AeroSpace uses TOML 1.1.0 format for the config. See [TOML spec for more info](https://toml.io/en/v1.1.0)
 
 ### Default config
 
@@ -124,7 +124,7 @@ If the key is omitted in the custom config, it falls back to the value in the de
 
 Rule of thumb: all the "scalar like" values always fall back to the default config. All the "vector like" values fall back to the empty TOML array or table.
 
-That allows you to keep your config tidy and clean from trivial config keys for which you like the default values. You can bootstrap your custom config by copying the default config from the app installation -
+That allows you to keep your config tidy and clean from trivial config keys for which you like the default values. You can bootstrap your custom config by copying the default config from the app installation:
 
 ``` shell
 cp /Applications/AeroSpace-edge.app/Contents/Resources/default-config.toml ~/.aerospace-edge.toml
@@ -133,209 +133,134 @@ cp /Applications/AeroSpace-edge.app/Contents/Resources/default-config.toml ~/.ae
 [Download default-config.toml](config-examples/default-config.toml)
 
 ``` toml
-## Place a copy of this config to ~/.aerospace-edge.toml
+# Place a copy of this config to ~/.aerospace-edge.toml
+# After that, you can edit ~/.aerospace-edge.toml to your liking
 
-## After that, you can edit ~/.aerospace-edge.toml to your liking
-
-## Config version for compatibility and deprecations
-
-## Fallback value (if you omit the key): config-version = 1
-
+# Config version for compatibility and deprecations
+# See: https://vitorebatista.github.io/AeroSpace-edge/guide/#config-version
+# Fallback value (if you omit the key): config-version = 1
 config-version = 2
 
-## You can use it to add commands that run after AeroSpace startup.
-
-## Available commands : https://vitorebatista.github.io/AeroSpace-edge/#commands
-
+# You can use it to add commands that run after AeroSpace startup.
+# Available commands : https://vitorebatista.github.io/AeroSpace-edge/#commands
 after-startup-command = []
 
-## Start AeroSpace at login
-
+# Start AeroSpace at login
 start-at-login = false
 
-## Automatically reload the config when the config file is saved
-
-## After setting this to true, reload once manually to start the auto-reloading
-
+# Automatically reload the config when the config file is saved
+# After setting this to true, reload once manually to start the auto-reloading
 auto-reload-config = false
 
-## Normalizations. See: https://vitorebatista.github.io/AeroSpace-edge/guide/#normalization
-
+# Normalizations. See: https://vitorebatista.github.io/AeroSpace-edge/guide/#normalization
 enable-normalization-flatten-containers = true
 enable-normalization-opposite-orientation-for-nested-containers = true
-## When true, forces the tree to be binary and orients each container by the aspect ratio of its rect
-
-## (horizontal if wider than tall, vertical otherwise). Overrides the opposite-orientation normalization.
-
+# When true, forces the tree to be binary and orients each container by the aspect ratio of its rect
+# (horizontal if wider than tall, vertical otherwise). Overrides the opposite-orientation normalization.
 enable-normalization-binary-tree = false
 
-## See: https://vitorebatista.github.io/AeroSpace-edge/guide/#layouts
-
-## The 'accordion-padding' specifies the size of accordion padding
-
-## You can set 0 to disable the padding feature
-
+# See: https://vitorebatista.github.io/AeroSpace-edge/guide/#layouts
+# The 'accordion-padding' specifies the size of accordion padding
+# You can set 0 to disable the padding feature
 accordion-padding = 30
 
-## Possible values: tiles|accordion
-
+# Possible values: tiles|accordion
 default-root-container-layout = 'tiles'
 
-## Possible values: horizontal|vertical|auto
-
-## 'auto' means: wide monitor (anything wider than high) gets horizontal orientation,
-
-##               tall monitor (anything higher than wide) gets vertical orientation
-
+# Possible values: horizontal|vertical|auto
+# 'auto' means: wide monitor (anything wider than high) gets horizontal orientation,
+#               tall monitor (anything higher than wide) gets vertical orientation
 default-root-container-orientation = 'auto'
 
-## Mouse follows focus when focused monitor changes
-
-## Drop it from your config, if you don't like this behavior
-
-## See https://vitorebatista.github.io/AeroSpace-edge/guide/#on-focus-changed-callbacks
-
-## See https://vitorebatista.github.io/AeroSpace-edge/commands/move-mouse/
-
-## Fallback value (if you omit the key): on-focused-monitor-changed = []
-
+# Mouse follows focus when focused monitor changes
+# Drop it from your config, if you don't like this behavior
+# See https://vitorebatista.github.io/AeroSpace-edge/guide/#on-focus-changed-callbacks
+# See https://vitorebatista.github.io/AeroSpace-edge/commands/move-mouse/
+# Fallback value (if you omit the key): on-focused-monitor-changed = []
 on-focused-monitor-changed = ['move-mouse monitor-lazy-center']
 
-## You can effectively turn off macOS "Hide application" (cmd-h) feature by toggling this flag
-
-## Useful if you don't use this macOS feature, but accidentally hit cmd-h or cmd-alt-h key
-
-## Also see: https://vitorebatista.github.io/AeroSpace-edge/goodies/#disable-hide-app
-
+# You can effectively turn off macOS "Hide application" (cmd-h) feature by toggling this flag
+# Useful if you don't use this macOS feature, but accidentally hit cmd-h or cmd-alt-h key
+# Also see: https://vitorebatista.github.io/AeroSpace-edge/goodies/#disable-hide-app
 automatically-unhide-macos-hidden-apps = false
 
-## What to do when an app activates itself while its window lives on another workspace.
-
-## Possible values: always|smart
-
-##   'always' - follow the activation and switch to that workspace (upstream behavior)
-
-##   'smart'  - switch only when the activation looks user-initiated (preceded by a mouse
-
-##              click: Dock icon, notification banner, window on another monitor).
-
-##              Input-less self-activations ("focus stealing") no longer switch your
-
-##              workspace. Note: cmd-tab is keyboard-driven, so under 'smart' it won't
-
-##              auto-switch either - use the workspace keybinding instead.
-
-## Fallback value (if you omit the key): focus-follows-app-activation = 'always'
-
+# What to do when an app activates itself while its window lives on another workspace.
+# Possible values: always|smart
+#   'always' - follow the activation and switch to that workspace (upstream behavior)
+#   'smart'  - switch only when the activation looks user-initiated (preceded by a mouse
+#              click: Dock icon, notification banner, window on another monitor).
+#              Input-less self-activations ("focus stealing") no longer switch your
+#              workspace. Note: cmd-tab is keyboard-driven, so under 'smart' it won't
+#              auto-switch either - use the workspace keybinding instead.
+# Fallback value (if you omit the key): focus-follows-app-activation = 'always'
 focus-follows-app-activation = 'always'
 
-## When a new window opens, move it offscreen the instant it's detected so macOS never
-
-## paints it at its native spawn position (usually screen center) before AeroSpace tiles it.
-
-## Reduces the flash/jump you see when a window appears and the tiles rearrange.
-
-## Opt-in because moving windows via the Accessibility API is app-dependent.
-
-## Fallback value (if you omit the key): new-window-prevent-flicker = false
-
+# When a new window opens, move it offscreen the instant it's detected so macOS never
+# paints it at its native spawn position (usually screen center) before AeroSpace tiles it.
+# Reduces the flash/jump you see when a window appears and the tiles rearrange.
+# Opt-in because moving windows via the Accessibility API is app-dependent.
+# Fallback value (if you omit the key): new-window-prevent-flicker = false
 new-window-prevent-flicker = false
-## Draw a colored border around the currently focused window.
-
-## Native alternative to external tools like JankyBorders for the focused-window case.
-
-## Fallback value (if you omit the key): focused-window-border = false
-
+# Draw a colored border around the currently focused window.
+# Native alternative to external tools like JankyBorders for the focused-window case.
+# Fallback value (if you omit the key): focused-window-border = false
 focused-window-border = false
-## Border color as 0xAARRGGBB (alpha, red, green, blue). Same format as JankyBorders.
-
-## Fallback value (if you omit the key): focused-window-border-color = '0xff12B981'
-
+# Border color as 0xAARRGGBB (alpha, red, green, blue). Same format as JankyBorders.
+# Fallback value (if you omit the key): focused-window-border-color = '0xff12B981'
 focused-window-border-color = '0xff12B981'
-## Border thickness in points.
-
-## Fallback value (if you omit the key): focused-window-border-width = 4
-
+# Border thickness in points.
+# Fallback value (if you omit the key): focused-window-border-width = 4
 focused-window-border-width = 4
-## Border opacity as a percentage 0-100. Multiplies the alpha of the color above.
-
-## Fallback value (if you omit the key): focused-window-border-opacity = 100
-
+# Border opacity as a percentage 0-100. Multiplies the alpha of the color above.
+# Fallback value (if you omit the key): focused-window-border-opacity = 100
 focused-window-border-opacity = 100
-## Corner radius (points) of the window the border hugs. macOS does not expose the
-
-## per-window corner radius, so this is a global value - tune it to match your apps.
-
-## Fallback value (if you omit the key): focused-window-border-radius = 10
-
+# Corner radius (points) of the window the border hugs. macOS does not expose the
+# per-window corner radius, so this is a global value - tune it to match your apps.
+# Fallback value (if you omit the key): focused-window-border-radius = 10
 focused-window-border-radius = 10
-## Pull the border this many points back into the window so the window's own rounded
-
-## corner masks any radius mismatch (hides corner gaps). 0 = border fully outside.
-
-## Fallback value (if you omit the key): focused-window-border-inset = 0
-
+# Pull the border this many points back into the window so the window's own rounded
+# corner masks any radius mismatch (hides corner gaps). 0 = border fully outside.
+# Fallback value (if you omit the key): focused-window-border-inset = 0
 focused-window-border-inset = 0
 
-## List of workspaces that should stay alive even when they contain no windows,
-
-## even when they are invisible.
-
-## This config option is only available since 'config-version = 2'
-
-## Fallback value (if you omit the key): persistent-workspaces = []
-
+# List of workspaces that should stay alive even when they contain no windows,
+# even when they are invisible.
+# This config option is only available since 'config-version = 2'
+# Fallback value (if you omit the key): persistent-workspaces = []
 persistent-workspaces = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "A", "B",
                          "C", "D", "E", "F", "G", "I", "M", "N", "O", "P", "Q",
                          "R", "S", "T", "U", "V", "W", "X", "Y", "Z"]
 
-## A callback that runs every time binding mode changes
+# A callback that runs every time binding mode changes
+# See: https://vitorebatista.github.io/AeroSpace-edge/guide/#binding-modes
+# See: https://vitorebatista.github.io/AeroSpace-edge/commands/mode/
+on-mode-changed = ""
 
-## See: https://vitorebatista.github.io/AeroSpace-edge/guide/#binding-modes
+focus-follows-mouse.enabled = false
 
-## See: https://vitorebatista.github.io/AeroSpace-edge/commands/mode/
+# Possible values: (qwerty|dvorak|colemak)
+# See https://vitorebatista.github.io/AeroSpace-edge/guide/#key-mapping
+key-mapping.preset = 'qwerty'
 
-on-mode-changed = []
+# Gaps between windows (inner-*) and between monitor edges (outer-*).
+# Possible values:
+# - Constant:     gaps.outer.top = 8
+# - Per monitor:  gaps.outer.top = [{ monitor.main = 16 }, { monitor."some-pattern" = 32 }, 24]
+#                 In this example, 24 is a default value when there is no match.
+#                 Monitor pattern is the same as for 'workspace-to-monitor-force-assignment'.
+#                 See:
+#                 https://vitorebatista.github.io/AeroSpace-edge/guide/#assign-workspaces-to-monitors
+gaps.inner.horizontal = 0
+gaps.inner.vertical =   0
+gaps.outer.left =       0
+gaps.outer.bottom =     0
+gaps.outer.top =        0
+gaps.outer.right =      0
 
-## Possible values: (qwerty|dvorak|colemak)
-
-## See https://vitorebatista.github.io/AeroSpace-edge/guide/#key-mapping
-
-[key-mapping]
-    preset = 'qwerty'
-
-## Gaps between windows (inner-*) and between monitor edges (outer-*).
-
-## Possible values:
-
-## - Constant:     gaps.outer.top = 8
-
-## - Per monitor:  gaps.outer.top = [{ monitor.main = 16 }, { monitor."some-pattern" = 32 }, 24]
-
-##                 In this example, 24 is a default value when there is no match.
-
-##                 Monitor pattern is the same as for 'workspace-to-monitor-force-assignment'.
-
-##                 See:
-
-##                 https://vitorebatista.github.io/AeroSpace-edge/guide/#assign-workspaces-to-monitors
-
-[gaps]
-    inner.horizontal = 0
-    inner.vertical =   0
-    outer.left =       0
-    outer.bottom =     0
-    outer.top =        0
-    outer.right =      0
-
-## 'main' binding mode declaration
-
-## See: https://vitorebatista.github.io/AeroSpace-edge/guide/#binding-modes
-
-## 'main' binding mode must be always presented
-
-## Fallback value (if you omit the key): mode.main.binding = {}
-
+# 'main' binding mode declaration
+# See: https://vitorebatista.github.io/AeroSpace-edge/guide/#binding-modes
+# 'main' binding mode must be always presented
+# Fallback value (if you omit the key): mode.main.binding = {}
 [mode.main.binding]
 
     # All possible keys:
@@ -358,12 +283,8 @@ on-mode-changed = []
     # See: https://vitorebatista.github.io/AeroSpace-edge/commands/exec-and-forget/
     # You can uncomment the following lines to open up terminal with alt + enter shortcut
     # (like in i3)
-    # alt-enter = '''exec-and-forget osascript -e '
-    # tell application "Terminal"
-    #     do script
-    #     activate
-    # end tell'
-    # '''
+    # alt-enter = '''exec-and-forget osascript -e \
+    # 'tell application "Terminal" to tell (do script) to activate' '''
 
     # See: https://vitorebatista.github.io/AeroSpace-edge/commands/layout/
     alt-slash = 'layout tiles horizontal vertical'
@@ -459,10 +380,8 @@ on-mode-changed = []
     # See: https://vitorebatista.github.io/AeroSpace-edge/commands/mode/
     alt-shift-semicolon = 'mode service'
 
-## 'service' binding mode declaration.
-
-## See: https://vitorebatista.github.io/AeroSpace-edge/guide/#binding-modes
-
+# 'service' binding mode declaration.
+# See: https://vitorebatista.github.io/AeroSpace-edge/guide/#binding-modes
 [mode.service.binding]
     esc = ['reload-config', 'mode main']
     r = ['flatten-workspace-tree', 'mode main'] # reset layout
@@ -508,7 +427,7 @@ There are two ways on how you can use commands:
         # Bind alt-1 key to switch to workspace 1
         alt-1 = 'workspace 1'
         # Or bind a sequence of commands
-        alt-shift-1 = ['move-node-to-workspace 1', 'workspace 1']
+        alt-shift-1 = 'move-node-to-workspace 1; workspace 1'
     ```
 
 2.  Run commands in CLI. Open up a Terminal.app and type:
@@ -519,17 +438,40 @@ There are two ways on how you can use commands:
 
 For the list of available commands see: [commands](index.md#commands)
 
-### Keyboard layouts and key mapping
+### Shell
+
+AeroSpace reimplements a small subset of Shell syntax. Namely, the well-known operators: `;`, `||`, `&&`, `|`, and parenthesis to specify the precedence (listed in the precedence order).
+
+That is what allows you to combine commands and run them in sequence or pipe one into another:
+
+``` toml
+[mode.main.binding]
+    alt-shift-1 = 'move-node-to-workspace 1; workspace 1'
+
+    alt-right = 'list-workspaces --monitor focused --empty no | workspace --stdin next'
+```
+
+This Shell-like string is exactly what you pass to the [eval command](commands/eval.md) argument.
+
+!!! note
+
+    **(1)** In traditional Shell, `||` and `&&` have the same precedence and are left associative, so `foo || bar && baz` parses as `(foo || bar) && baz`. AeroSpace's shell syntax diverges from that dubious design decision.
+
+    Instead, it follows the hopefully more intuitive precedence rules, where `&&` operator has bigger binding power, so the very same command above parses as `foo || (bar && baz)`.
+
+    **(2)** In AeroSpace, the pipe operator `|` semantic matches `set -o pipefail` from traditional shells.
+
+### Keyboard layouts and key mapping { #key-mapping }
 
 By default, key bindings in the config are perceived as `qwerty` layout.
 
 If you use different layout, different alphabet, or you just want to have a fancy alias for the existing key, you can use `key-mapping.key-notation-to-key-code`.
 
 ``` toml
-## Define my fancy unicorn key notation
-
-[key-mapping.key-notation-to-key-code]
-    unicorn = 'u'
+# Define my fancy unicorn key notation
+key-mapping.key-notation-to-key-code = {
+    unicorn = 'u',
+}
 
 [mode.main.binding]
     alt-unicorn = 'workspace wonderland' # (⁀ᗢ⁀)
@@ -538,9 +480,41 @@ If you use different layout, different alphabet, or you just want to have a fanc
 - For `dvorak` and `colemak` users, AeroSpace offers preconfigured presets.
 
   ``` toml
-  [key-mapping]
-      preset = 'dvorak'  # or 'colemak'
+  key-mapping.preset = 'dvorak'  # or 'colemak'
   ```
+
+### config-version
+
+`config-version` is a mechanism for introducing breaking changes to AeroSpace.
+
+Omitting `config-version` is equivalent to `config-version = 1` (the lowest possible version). The currently highest possible version is 2. It is recommended to use that version.
+
+If `config-version` is lower than the highest possible, [reload-config](commands/reload-config.md) will emit a warning to stderr.
+
+#### config-version = 2
+
+By specifying `config-version = 2`, you opt-in to the following behavior:
+
+- You unlock the possibility to specify `persistent-workspaces` config option in your config explicitly.
+
+- The fallback value of `persistent-workspaces` becomes an empty array (In `config-version = 1`, the fallback value of `persistent-workspaces` was inferred from the right hand side of your keyboard bindings. It's proved to be error-prone)
+
+### after-startup-command
+
+You use `after-startup-command` to run arbitrary commands on AeroSpace startup.
+
+Common use cases:
+
+1.  Run third-party tool on AeroSpace startup (e.g. Sketchybar)
+
+2.  Set default layouts for specific workspaces
+
+    ``` toml
+    after-startup-command = [
+        'layout --workspace 2 --root v_tiles',
+        'layout --workspace 3 --root h_accordion',
+    ]
+    ```
 
 ### exec-* Environment Variables { #exec-env-vars }
 
@@ -551,8 +525,9 @@ You can configure environment variables of `exec-*` commands and callbacks (such
 - You can override env variables with the following syntax:
 
   ``` toml
-  [exec.env-vars]
+  exec.env-vars = {
       PATH = '${HOME}/bin:${PATH}'
+  }
   ```
 
   Environment variable substitution is supported in form of `${ENV_VAR}`
@@ -562,18 +537,19 @@ You can configure environment variables of `exec-*` commands and callbacks (such
 - GUI apps on macOS don’t have Homebrew’s prefix in their `PATH` by default ([docs.brew.sh](https://docs.brew.sh/FAQ#my-mac-apps-dont-find-homebrew-utilities)). That’s why unless you override `exec` section in your config, AeroSpace falls back to the following `exec` configuration:
 
   ``` toml
-  [exec]
-      inherit-env-vars = true
-  [exec.env-vars]
+  exec.inherit-env-vars = true
+  exec.env-vars = {
       PATH = '/opt/homebrew/bin:/opt/homebrew/sbin:${PATH}'
+  }
   ```
 
   On Intel Macs, Homebrew’s prefix is `/usr/local` ([docs.brew.sh](https://docs.brew.sh/Installation)).
   That’s why on Intel Macs, AeroSpace-edge additionally prepends `/usr/local/bin:/usr/local/sbin` to the `PATH`:
 
   ``` toml
-  [exec.env-vars]
+  exec.env-vars = {
       PATH = '/usr/local/bin:/usr/local/sbin:/opt/homebrew/bin:/opt/homebrew/sbin:${PATH}'
+  }
   ```
 
 ## Tree
@@ -650,7 +626,7 @@ Accordion padding is configurable via `accordion-padding` option.
 
 ### Normalization
 
-By default, AeroSpace does two types of tree normalizations:
+By default, AeroSpace performs two types of tree normalizations:
 
 1.  Containers that have only one child are "flattened". The root container is an exception, it is allowed to have a single window child. Configured by `enable-normalization-flatten-containers`
 
@@ -853,42 +829,48 @@ automations, Spotlight and anything that should follow a Focus mode.
 
 ### 'on-window-detected' callback
 
-You can use `on-window-detected` callback to run commands every time a new window is detected.
-
-Here is a showcase example that uses all the possible configurations:
+You can use `on-window-detected` config option to run commands every time a new window is detected.
 
 ``` toml
-[[on-window-detected]]
-    if.app-id = 'com.apple.systempreferences'  # Can also be an array: ['app1.id', 'app2.id']
-    if.app-id-regex-substring = '^com.apple..+$'
-    if.app-name-regex-substring = 'settings'
-    if.window-title-regex-substring = 'substring'
-    if.workspace = 'workspace-name'
-    if.during-aerospace-startup = true
-    check-further-callbacks = true
-    run = ['layout floating', 'move-node-to-workspace S']  # The callback itself
+on-window-detected = [
+    {
+        if = 'test %{app-bundle-id} = com.apple.systempreferences',
+        check-further-callbacks = true,
+        run = ['layout floating', 'move-node-to-workspace S'],  # The callback itself
+    },
+]
 ```
 
-`run` commands are run only if the detected window matches all the specified conditions. If no conditions are specified then `run` is run every time a new window is detected.
+`on-window-detected` is an ordered list of callback objects. Every object has `if` and `run` (both are mandatory) keys inside. When a new window is detected:
 
-Several callbacks can be declared in the config. The callbacks are processed in the order they are declared. By default, the first callback that matches the criteria is run, and further callbacks are not considered. (The behavior can be overridden with `check-further-callbacks` option)
+1.  AeroSpace processes the list of the callback objects in the defined order.
 
-Available window conditions are:
+2.  For every callback object, AeroSpace runs the command in the `if`.
 
-| Condition TOML key | Condition description |
-| --- | --- |
-| `if.app-id` | Application ID exact match of the detected window |
-| `if.app-id-regex-substring` | Application ID case insensitive regex substring of the detected window |
-| `if.app-name-regex-substring` | Application name case insensitive regex substring of the detected window |
-| `if.window-title-regex-substring` | Window title case insensitive regex substring of the detected window |
-| `if.during-aerospace-startup` | - If `true` then run the callback only during AeroSpace startup.<br>- If `false` then run callback only **NOT** during AeroSpace startup.<br>- If not specified then the condition isn’t checked |
-| `if.workspace` | Window’s workspace name exact match |
+3.  If the `if` command exits with zero exit code (successful), then AeroSpace runs the command in the `run` and doesn't process any further callback objects.
 
-- `if.during-aerospace-startup = true` is useful if you want to do the initial app arrangement only on startup.
+4.  If the `if` command exits with non-zero exit code (fail), then AeroSpace attempts processing the next object in the list.
 
-- `if.during-aerospace-startup = false` is useful if you want to relaunch AeroSpace, but the callback has side effects that you don’t want to run on every relaunch. (e.g. the callback opens new windows)
+[test](commands/test.md), [test-not](commands/test-not.md), [true](commands/true.md) and [false](commands/false.md) commands are designed to be used inside the `if`.
 
-There are several ways to know `app-id`:
+Additionally, if you want to keep processing the list of callbacks when the `if` is successful, you can use the `check-further-callbacks` option like so:
+
+``` toml
+on-window-detected = [
+    {
+        if = 'test %{app-bundle-id} = com.apple.systempreferences',
+        run = ['layout floating', 'move-node-to-workspace S'],
+
+        # The next callbacks will be considered even if this one is successful.
+        check-further-callbacks = true,
+    },
+    # all other callbacks...
+]
+```
+
+The older `if.*` condition keys (`if.app-id`, `if.window-title-regex-substring`, …) are still supported. See [Legacy 'on-window-detected' syntax](#legacy-on-window-detected-syntax).
+
+A common use case is to match against app bundle ID in `on-window-detected` callback. There are several ways to know `app-bundle-id`:
 
 - Take a look at the precompiled [list of Apple application IDs](goodies.md#list-of-apple-application-ids)
 
@@ -898,37 +880,36 @@ There are several ways to know `app-id`:
 
 !!! info
 
-    Some windows initialize their title after the window appears. `window-title-regex-substring` may not work as expected for such windows
+    Some windows initialize their title after the window appears. Matching against the window title (`%{window-title}`, or the legacy `if.window-title-regex-substring`) may not work as expected for such windows
 
 Examples of automations:
 
 - Assign apps on particular workspaces
 
   ``` toml
-  [[on-window-detected]]
-      if.app-id = 'org.alacritty'
-      run = 'move-node-to-workspace T' # mnemonics T - Terminal
-
-  [[on-window-detected]]
-      if.app-id = 'com.google.Chrome'
-      run = 'move-node-to-workspace W' # mnemonics W - Web browser
-
-  [[on-window-detected]]
-      if.app-id = 'com.jetbrains.intellij'
-      run = 'move-node-to-workspace I' # mnemonics I - IDE
-
-  # You can also use an array to match multiple app IDs with a single rule
-  [[on-window-detected]]
-      if.app-id = ['org.mozilla.firefox', 'com.google.Chrome', 'com.brave.Browser']
-      run = 'move-node-to-workspace W' # All web browsers to workspace W
+  on-window-detected = [
+      {
+          if = 'test %{app-bundle-id} = org.alacritty',
+          run = 'move-node-to-workspace T', # mnemonics T - Terminal
+      },
+      {
+          if = 'test %{app-bundle-id} = com.google.Chrome || test %{app-bundle-id} = org.mozilla.firefox',
+          run = 'move-node-to-workspace W', # mnemonics W - Web browser
+      },
+      {
+          if = 'test %{app-bundle-id} = com.jetbrains.intellij',
+          run = 'move-node-to-workspace I', # mnemonics I - IDE
+      }
+  ]
   ```
 
 - Make all windows float by default
 
   ``` toml
-  [[on-window-detected]]
-      check-further-callbacks = true
-      run = 'layout floating'
+  on-window-detected = [
+      { check-further-callbacks = true, run = 'layout floating', },
+      # all other callbacks...
+  ]
   ```
 
 ### 'on-focus-changed' callbacks
@@ -943,7 +924,7 @@ A common use case for the callbacks is to implement "mouse follows focus" behavi
 
 ``` toml
 on-focused-monitor-changed = ['move-mouse monitor-lazy-center'] # Mouse lazily follows focused monitor (default in i3)
-## or
+# or
 
 on-focus-changed = ['move-mouse window-lazy-center'] # Mouse lazily follows any focus (window or workspace)
 ```
@@ -957,8 +938,7 @@ The callbacks are "recursion resistant", which means that any focus change withi
 `exec-on-workspace-change` callback allows to run arbitrary process when focused workspace changes. It may be useful for integrating with bars.
 
 ``` toml
-## Notify Sketchybar about workspace change
-
+# Notify Sketchybar about workspace change
 exec-on-workspace-change = ['/bin/bash', '-c',
     'sketchybar --trigger aerospace_workspace_change FOCUSED=$AEROSPACE_FOCUSED_WORKSPACE'
 ]
@@ -990,7 +970,28 @@ In practice:
 
 - For ['on-focus-changed' callbacks](#on-focus-changed-callbacks) (`on-focus-changed`, `on-focused-monitor-changed`), the target is the new focus, so `AEROSPACE_WINDOW_ID` is set when a window is focused, and `AEROSPACE_WORKSPACE` is set when focus lands on an empty workspace.
 
-Commands that need a target ([layout](commands/layout.md), [move-node-to-workspace](commands/move-node-to-workspace.md), [move](commands/move.md), etc.) honor the forwarded context before falling back to the currently focused window or workspace. That makes commands in callbacks operate on the originating window or workspace even when global focus has already moved. The full resolution order, from highest to lowest priority, is:
+Commands that need a target ([layout](commands/layout.md), [move-node-to-workspace](commands/move-node-to-workspace.md), [move](commands/move.md), etc.) honor the forwarded context before falling back to the currently focused window or workspace. That makes all commands in callbacks operate on the originating window or workspace even when global focus has already moved:
+
+``` toml
+on-window-detected = [
+    # Both commands operate on the *just-detected* window:
+    #   1. 'move-node-to-workspace 2' moves the new window to workspace 2.
+    #      Moving the window away typically causes some *other* window on
+    #      the current workspace to receive focus.
+    #   2. 'layout floating' still floats the originally detected window
+    #      (not the window that became focused after step 1), because the second
+    #      command inherits the same AEROSPACE_WINDOW_ID as the first.
+    { if = 'true', run = 'move-node-to-workspace 2; layout floating' },
+
+    # 'aerospace-edge move-node-to-workspace W' moves the *newly detected* window,
+    # because the child shell inherits AEROSPACE_WINDOW_ID pointing at it.
+    { if = 'true', run = 'exec-and-forget sleep 1; aerospace-edge move-node-to-workspace W' },
+]
+```
+
+### Overriding the context with `--window-id` / `--workspace` { #overriding-context }
+
+Many commands that need a target ([layout](commands/layout.md), [move-node-to-workspace](commands/move-node-to-workspace.md), [close](commands/close.md), etc.) accept explicit `--window-id <id>` and/or `--workspace <name>` options. These flags take precedence over the environment variables. The full resolution order, from highest to lowest priority, is:
 
 1.  `--window-id` command-line option
 
@@ -1063,14 +1064,15 @@ before.
 You can use `workspace-to-monitor-force-assignment` syntax to assign workspaces to always appear on particular monitors
 
 ``` toml
-[workspace-to-monitor-force-assignment]
-    1 = 1                            # Monitor sequence number from left to right. 1-based indexing
-    2 = 'main'                       # Main monitor
-    3 = 'secondary'                  # Non-main monitor in case when there are only two monitors
-    4 = 'built-in'                   # Case insensitive regex substring
-    5 = '^built-in retina display$'  # Case insensitive regex match
-    6 = ['secondary', 'dell']        # You can specify multiple patterns.
-                                     #   The first matching pattern will be used
+workspace-to-monitor-force-assignment = {
+    1 = 1,                            # Monitor sequence number from left to right. 1-based indexing
+    2 = 'main',                       # Main monitor
+    3 = 'secondary',                  # Non-main monitor in case when there are only two monitors
+    4 = 'built-in',                   # Case insensitive regex substring
+    5 = '^built-in retina display$',  # Case insensitive regex match
+    6 = ['secondary', 'dell'],        # You can specify multiple patterns.
+                                      #   The first matching pattern will be used
+}
 ```
 
 - Left hand side of the assignment is the workspace name
@@ -1112,17 +1114,21 @@ You can also use `on-window-detected` to force tile or force float all windows o
 1.  Force tile all the windows (or windows of a particular app)
 
     ``` toml
-    [[on-window-detected]]
-        if.app-id = '...'
-        run = 'layout tiling'
+    on-window-detected = [
+        # Other callbacks...
+        { if.app-id = '...', run = 'layout tiling', },
+        # Other callbacks...
+    ]
     ```
 
 2.  Force float all the windows (or windows of a particular app)
 
     ``` toml
-    [[on-window-detected]]
-        if.app-id = '...'
-        run = 'layout floating'
+    on-window-detected = [
+        # Other callbacks...
+        { if.app-id = '...', run = 'layout floating', },
+        # Other callbacks...
+    ]
     ```
 
 ## Common pitfall: keyboard keys handling
@@ -1273,3 +1279,48 @@ with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
         raise RuntimeError(answer["stderr"])
     print(answer["stdout"])
 ```
+
+## Deprecations
+
+### Legacy 'on-window-detected' syntax
+
+The following `if.*` syntax inside `on-window-detected` is soft deprecated. It is still supported, and it will probably remain supported forever given its wide use.
+
+``` toml
+on-window-detected = [
+    {
+        if.app-id = 'com.apple.systempreferences', # ❌ Please don't do that
+        run = ['layout floating', 'move-node-to-workspace S'],
+    },
+]
+```
+
+Instead of the `if.*` syntax, you are encouraged to use `if = 'test ...'` syntax. See [the test helper command documentation](commands/test.md) for more information.
+
+``` toml
+on-window-detected = [
+    {
+        if = 'test %{app-bundle-id} = com.apple.systempreferences', # ✅ Do this
+        run = ['layout floating', 'move-node-to-workspace S'],
+    },
+]
+```
+
+The `[[on-window-detected]]` array-of-tables form (one `[[on-window-detected]]` header per callback) is the same list written in a different TOML notation, and it keeps working too.
+
+For reference, the legacy `if.*` condition keys are:
+
+| Condition TOML key | Condition description |
+| --- | --- |
+| `if.app-id` | Application ID exact match of the detected window. Can also be an array: `['app1.id', 'app2.id']` |
+| `if.app-id-regex-substring` | Application ID case insensitive regex substring of the detected window |
+| `if.app-name-regex-substring` | Application name case insensitive regex substring of the detected window |
+| `if.window-title-regex-substring` | Window title case insensitive regex substring of the detected window |
+| `if.during-aerospace-startup` | - If `true` then run the callback only during AeroSpace startup.<br>- If `false` then run callback only **NOT** during AeroSpace startup.<br>- If not specified then the condition isn’t checked |
+| `if.workspace` | Window’s workspace name exact match |
+
+All the specified `if.*` conditions must match for `run` to be run. If no conditions (and no `if`) are specified then `run` is run every time a new window is detected.
+
+- `if.during-aerospace-startup = true` is useful if you want to do the initial app arrangement only on startup.
+
+- `if.during-aerospace-startup = false` is useful if you want to relaunch AeroSpace, but the callback has side effects that you don’t want to run on every relaunch. (e.g. the callback opens new windows)

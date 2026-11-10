@@ -1,38 +1,39 @@
 @testable import AppBundle
 import Common
-import XCTest
+import Testing
 
 @MainActor
-final class CloseCommandTest: XCTestCase {
-    override func setUp() async throws { setUpWorkspacesForTests() }
+@Suite(.serializedGlobally)
+struct CloseCommandTest {
+    init() { setUpWorkspacesForTests() }
 
-    func testSimple() async throws {
+    @Test func testSimple() async {
         Workspace.get(byName: name).rootTilingContainer.apply {
             _ = TestWindow.new(id: 1, parent: $0).focusWindow()
             TestWindow.new(id: 2, parent: $0)
         }
 
-        assertEquals(focus.windowOrNil?.windowId, 1)
-        assertEquals(focus.workspace.rootTilingContainer.children.count, 2)
+        assertEquals(globalFocus.windowOrNil?.windowId, 1)
+        assertEquals(globalFocus.workspace.rootTilingContainer.children.count, 2)
 
-        try await CloseCommand(args: CloseCmdArgs(rawArgs: [])).run(.defaultEnv, .emptyStdin)
+        await parseCommand("close").cmdOrDie.run(.defaultEnv, .emptyStdin)
 
-        assertEquals(focus.windowOrNil?.windowId, 2)
-        assertEquals(focus.workspace.rootTilingContainer.children.count, 1)
+        assertEquals(globalFocus.windowOrNil?.windowId, 2)
+        assertEquals(globalFocus.workspace.rootTilingContainer.children.count, 1)
     }
 
-    func testCloseViaWindowIdFlag() async throws {
+    @Test func testCloseViaWindowIdFlag() async {
         Workspace.get(byName: name).rootTilingContainer.apply {
             _ = TestWindow.new(id: 1, parent: $0).focusWindow()
             TestWindow.new(id: 2, parent: $0)
         }
 
-        assertEquals(focus.windowOrNil?.windowId, 1)
-        assertEquals(focus.workspace.rootTilingContainer.children.count, 2)
+        assertEquals(globalFocus.windowOrNil?.windowId, 1)
+        assertEquals(globalFocus.workspace.rootTilingContainer.children.count, 2)
 
-        try await CloseCommand(args: CloseCmdArgs(rawArgs: []).copy(\.windowId, 2)).run(.defaultEnv, .emptyStdin)
+        await parseCommand("close --window-id 2").cmdOrDie.run(.defaultEnv, .emptyStdin)
 
-        assertEquals(focus.windowOrNil?.windowId, 1)
-        assertEquals(focus.workspace.rootTilingContainer.children.count, 1)
+        assertEquals(globalFocus.windowOrNil?.windowId, 1)
+        assertEquals(globalFocus.workspace.rootTilingContainer.children.count, 1)
     }
 }

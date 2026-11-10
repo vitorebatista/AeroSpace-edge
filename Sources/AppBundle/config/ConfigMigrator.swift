@@ -23,8 +23,8 @@ enum ConfigMigrator {
 
         let document = TomlBlockDocument(text)
         let source = parseConfig(text)
-        guard source.errors.isEmpty else { return .failure(.invalidSource(source.errors)) }
-        guard source.config.configVersion == from else {
+        guard source.errors.isEmpty else { return .failure(.invalidSource(source.errorMessages)) }
+        guard source.config.configVersion.rawValue == from else {
             return .failure(.semanticMismatch("Source config-version is \(source.config.configVersion), expected \(from)"))
         }
 
@@ -36,13 +36,13 @@ enum ConfigMigrator {
             if entry.table != "mode.main.binding" { oneBinding += "[mode.main.binding]\n" }
             oneBinding += "[\(entry.table)]\n\(entry.text)"
             let parsed = parseConfig(oneBinding)
-            guard parsed.errors.isEmpty else { return .failure(.invalidSource(parsed.errors)) }
+            guard parsed.errors.isEmpty else { return .failure(.invalidSource(parsed.errorMessages)) }
 
             let bindings = parsed.config.modes.values.flatMap { $0.bindings.values }
             guard bindings.count == 1 else {
                 return .failure(.semanticMismatch("Expected one binding while parsing \(entry.table)"))
             }
-            for command in bindings[0].commands {
+            for command in bindings[0].commands.flatten() {
                 if let workspace = (command as? WorkspaceCommand)?.args.target.val.workspaceNameOrNil()?.raw {
                     persistentWorkspaces.append(workspace)
                 }
@@ -54,7 +54,7 @@ enum ConfigMigrator {
 
         for entry in document.keyValueTexts(inTableMatching: { $0 == "workspace-to-monitor-force-assignment" }) {
             let parsed = parseConfig("[\(entry.table)]\n\(entry.text)")
-            guard parsed.errors.isEmpty else { return .failure(.invalidSource(parsed.errors)) }
+            guard parsed.errors.isEmpty else { return .failure(.invalidSource(parsed.errorMessages)) }
             guard let workspace = parsed.config.workspaceToMonitorForceAssignment.keys.first else {
                 return .failure(.semanticMismatch("Expected one workspace assignment"))
             }
@@ -73,7 +73,7 @@ enum ConfigMigrator {
         )
         let candidateText = candidateDocument.render()
         let candidate = parseConfig(candidateText)
-        guard candidate.errors.isEmpty else { return .failure(.invalidCandidate(candidate.errors)) }
+        guard candidate.errors.isEmpty else { return .failure(.invalidCandidate(candidate.errorMessages)) }
 
         var sourceDraft = ConfigTomlWriter.draft(
             from: source.config,

@@ -1,7 +1,6 @@
 excluded:
-  - .build
-  - .xcode-build
-  - ./ShellParserGenerated
+  - .*
+  - xcode
 
 # https://realm.github.io/SwiftLint/rule-directory.html
 only_rules:
@@ -41,7 +40,6 @@ only_rules:
   # - unused_closure_parameter
   - unused_control_flow_label
   - unused_enumerated # When the index or the item is not used, .enumerated() can be removed.
-  - unused_optional_binding # Prefer != nil over let _ =
   - unused_setter_value
   - weak_delegate # Delegates should be weak to avoid reference cycles
 

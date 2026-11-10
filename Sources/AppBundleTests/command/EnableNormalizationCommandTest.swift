@@ -1,22 +1,23 @@
 @testable import AppBundle
 import Common
-import XCTest
+import Testing
 
 @MainActor
-final class EnableNormalizationCommandTest: XCTestCase {
-    override func setUp() async throws { setUpWorkspacesForTests() }
+@Suite(.serializedGlobally)
+struct EnableNormalizationCommandTest {
+    init() { setUpWorkspacesForTests() }
 
-    func testParse() {
-        let command = parseCommand("enable-normalization flatten-containers on").cmdOrNil
-        XCTAssertTrue(command is EnableNormalizationCommand)
+    @Test func testParse() {
+        let command = parseCommand("enable-normalization flatten-containers on").singleCmdOrNil
+        #expect(command is EnableNormalizationCommand)
         let args = (command as! EnableNormalizationCommand).args
         assertEquals(args.kind.val, .flattenContainers)
         assertEquals(args.targetState.val, .on)
         assertEquals(args.failIfNoop, false)
-        XCTAssertNil(args.workspaceName)
+        #expect(args.workspaceName == nil)
 
-        let command2 = parseCommand("enable-normalization --workspace foo --fail-if-noop opposite-orientation-for-nested-containers off").cmdOrNil
-        XCTAssertTrue(command2 is EnableNormalizationCommand)
+        let command2 = parseCommand("enable-normalization --workspace foo --fail-if-noop opposite-orientation-for-nested-containers off").singleCmdOrNil
+        #expect(command2 is EnableNormalizationCommand)
         let args2 = (command2 as! EnableNormalizationCommand).args
         assertEquals(args2.kind.val, .oppositeOrientationForNestedContainers)
         assertEquals(args2.targetState.val, .off)
@@ -24,7 +25,7 @@ final class EnableNormalizationCommandTest: XCTestCase {
         assertEquals(args2.workspaceName?.raw, "foo")
     }
 
-    func testParseFailIfNoopIncompatibleWithToggleAndReset() {
+    @Test func testParseFailIfNoopIncompatibleWithToggleAndReset() {
         assertEquals(
             parseCommand("enable-normalization flatten-containers toggle --fail-if-noop").errorOrNil,
             "--fail-if-noop is incompatible with 'toggle' or 'reset' arguments",
@@ -35,46 +36,46 @@ final class EnableNormalizationCommandTest: XCTestCase {
         )
     }
 
-    func testParseInvalidKind() {
+    @Test func testParseInvalidKind() {
         let error = parseCommand("enable-normalization bogus on").errorOrNil
-        XCTAssertNotNil(error)
-        XCTAssertTrue(error?.contains("bogus") == true, "error must name the unparsable argument: \(error ?? "nil")")
-        XCTAssertTrue(error?.contains("flatten-containers|opposite-orientation-for-nested-containers") == true, "error must list the possible values: \(error ?? "nil")")
+        #expect(error != nil)
+        #expect(error?.contains("bogus") == true, "error must name the unparsable argument: \(error ?? "nil")")
+        #expect(error?.contains("flatten-containers|opposite-orientation-for-nested-containers") == true, "error must list the possible values: \(error ?? "nil")")
     }
 
-    func testParseMissingArgs() {
+    @Test func testParseMissingArgs() {
         let error = parseCommand("enable-normalization").errorOrNil
-        XCTAssertNotNil(error)
-        XCTAssertTrue(error?.contains("flatten-containers|opposite-orientation-for-nested-containers") == true, "error must mention the mandatory <kind> placeholder: \(error ?? "nil")")
+        #expect(error != nil)
+        #expect(error?.contains("flatten-containers|opposite-orientation-for-nested-containers") == true, "error must mention the mandatory <kind> placeholder: \(error ?? "nil")")
     }
 
-    func testOverride_on_takesPrecedenceOverGlobalOff() {
+    @Test func testOverride_on_takesPrecedenceOverGlobalOff() {
         config.enableNormalizationOppositeOrientationForNestedContainers = false
         let workspace = Workspace.get(byName: name)
         workspace.normalizationOverride[.oppositeOrientationForNestedContainers] = true
 
-        XCTAssertTrue(workspace.isNormalizationEnabled(.oppositeOrientationForNestedContainers))
+        #expect(workspace.isNormalizationEnabled(.oppositeOrientationForNestedContainers))
     }
 
-    func testOverride_off_takesPrecedenceOverGlobalOn() {
+    @Test func testOverride_off_takesPrecedenceOverGlobalOn() {
         config.enableNormalizationOppositeOrientationForNestedContainers = true
         let workspace = Workspace.get(byName: name)
         workspace.normalizationOverride[.oppositeOrientationForNestedContainers] = false
 
-        XCTAssertFalse(workspace.isNormalizationEnabled(.oppositeOrientationForNestedContainers))
+        #expect(!workspace.isNormalizationEnabled(.oppositeOrientationForNestedContainers))
     }
 
-    func testOverride_isPerWorkspace() {
+    @Test func testOverride_isPerWorkspace() {
         config.enableNormalizationOppositeOrientationForNestedContainers = false
         let a = Workspace.get(byName: "ws-A-\(name)")
         let b = Workspace.get(byName: "ws-B-\(name)")
         a.normalizationOverride[.oppositeOrientationForNestedContainers] = true
 
-        XCTAssertTrue(a.isNormalizationEnabled(.oppositeOrientationForNestedContainers))
-        XCTAssertFalse(b.isNormalizationEnabled(.oppositeOrientationForNestedContainers))
+        #expect(a.isNormalizationEnabled(.oppositeOrientationForNestedContainers))
+        #expect(!b.isNormalizationEnabled(.oppositeOrientationForNestedContainers))
     }
 
-    func testOverride_appliedAtRefreshTime() {
+    @Test func testOverride_appliedAtRefreshTime() {
         config.enableNormalizationOppositeOrientationForNestedContainers = false
         let workspace = Workspace.get(byName: name)
         workspace.normalizationOverride[.oppositeOrientationForNestedContainers] = true
@@ -100,22 +101,22 @@ final class EnableNormalizationCommandTest: XCTestCase {
 
     /// The override lives only as long as the workspace: garbage collection of an
     /// empty invisible workspace destroys the override together with the workspace.
-    func testOverride_diesWithWorkspaceGC() {
+    @Test func testOverride_diesWithWorkspaceGC() {
         config.enableNormalizationOppositeOrientationForNestedContainers = false
         let doomedName = "ws-gc-doomed"
         Workspace.get(byName: doomedName).normalizationOverride[.oppositeOrientationForNestedContainers] = true
 
         Workspace.garbageCollectUnusedWorkspaces()
-        XCTAssertFalse(Workspace.all.contains { $0.name == doomedName }, "precondition: empty invisible workspace must be garbage-collected")
+        #expect(!(Workspace.all.contains { $0.name == doomedName }), "precondition: empty invisible workspace must be garbage-collected")
 
         let revived = Workspace.get(byName: doomedName)
-        XCTAssertNil(revived.normalizationOverride[.oppositeOrientationForNestedContainers])
-        XCTAssertFalse(revived.isNormalizationEnabled(.oppositeOrientationForNestedContainers))
+        #expect(revived.normalizationOverride[.oppositeOrientationForNestedContainers] == nil)
+        #expect(!revived.isNormalizationEnabled(.oppositeOrientationForNestedContainers))
     }
 
-    func testChangeOrientation_overrideOn_cascadesToAncestors() {
+    @Test func testChangeOrientation_overrideOn_cascadesToAncestors() {
         // Global opposite-orientation normalization is off via setUpWorkspacesForTests.
-        let workspace = focus.workspace
+        let workspace = globalFocus.workspace
         workspace.normalizationOverride[.oppositeOrientationForNestedContainers] = true
         let root = workspace.rootTilingContainer.apply {
             TestWindow.new(id: 1, parent: $0)
@@ -133,9 +134,9 @@ final class EnableNormalizationCommandTest: XCTestCase {
         ]))
     }
 
-    func testChangeOrientation_overrideOff_globalOn_doesNotCascade() {
+    @Test func testChangeOrientation_overrideOff_globalOn_doesNotCascade() {
         config.enableNormalizationOppositeOrientationForNestedContainers = true
-        let workspace = focus.workspace
+        let workspace = globalFocus.workspace
         workspace.normalizationOverride[.oppositeOrientationForNestedContainers] = false
         let root = workspace.rootTilingContainer.apply {
             TestWindow.new(id: 1, parent: $0)
@@ -153,102 +154,102 @@ final class EnableNormalizationCommandTest: XCTestCase {
         ]))
     }
 
-    func testCommand_on_setsOverride() async throws {
-        let workspace = focus.workspace
-        _ = try await parseCommand("enable-normalization opposite-orientation-for-nested-containers on").cmdOrDie
-            .run(.defaultEnv.copy(\.workspaceName, workspace.name), .emptyStdin)
+    @Test func testCommand_on_setsOverride() async {
+        let workspace = globalFocus.workspace
+        _ = await parseCommand("enable-normalization opposite-orientation-for-nested-containers on").cmdOrDie
+            .run(.defaultEnv.withWorkspaceName(workspace.name), .emptyStdin)
 
         assertEquals(workspace.normalizationOverride[.oppositeOrientationForNestedContainers], true)
     }
 
-    func testCommand_off_setsOverride() async throws {
-        let workspace = focus.workspace
-        _ = try await parseCommand("enable-normalization opposite-orientation-for-nested-containers off").cmdOrDie
-            .run(.defaultEnv.copy(\.workspaceName, workspace.name), .emptyStdin)
+    @Test func testCommand_off_setsOverride() async {
+        let workspace = globalFocus.workspace
+        _ = await parseCommand("enable-normalization opposite-orientation-for-nested-containers off").cmdOrDie
+            .run(.defaultEnv.withWorkspaceName(workspace.name), .emptyStdin)
 
         assertEquals(workspace.normalizationOverride[.oppositeOrientationForNestedContainers], false)
     }
 
-    func testCommand_toggle_flipsEffectiveValue() async throws {
+    @Test func testCommand_toggle_flipsEffectiveValue() async {
         config.enableNormalizationOppositeOrientationForNestedContainers = false
-        let workspace = focus.workspace
+        let workspace = globalFocus.workspace
 
-        _ = try await parseCommand("enable-normalization opposite-orientation-for-nested-containers toggle").cmdOrDie
-            .run(.defaultEnv.copy(\.workspaceName, workspace.name), .emptyStdin)
+        _ = await parseCommand("enable-normalization opposite-orientation-for-nested-containers toggle").cmdOrDie
+            .run(.defaultEnv.withWorkspaceName(workspace.name), .emptyStdin)
         assertEquals(workspace.normalizationOverride[.oppositeOrientationForNestedContainers], true)
 
-        _ = try await parseCommand("enable-normalization opposite-orientation-for-nested-containers toggle").cmdOrDie
-            .run(.defaultEnv.copy(\.workspaceName, workspace.name), .emptyStdin)
+        _ = await parseCommand("enable-normalization opposite-orientation-for-nested-containers toggle").cmdOrDie
+            .run(.defaultEnv.withWorkspaceName(workspace.name), .emptyStdin)
         assertEquals(workspace.normalizationOverride[.oppositeOrientationForNestedContainers], false)
     }
 
-    func testCommand_reset_clearsOverride() async throws {
-        let workspace = focus.workspace
+    @Test func testCommand_reset_clearsOverride() async {
+        let workspace = globalFocus.workspace
         workspace.normalizationOverride[.oppositeOrientationForNestedContainers] = true
 
-        _ = try await parseCommand("enable-normalization opposite-orientation-for-nested-containers reset").cmdOrDie
-            .run(.defaultEnv.copy(\.workspaceName, workspace.name), .emptyStdin)
+        _ = await parseCommand("enable-normalization opposite-orientation-for-nested-containers reset").cmdOrDie
+            .run(.defaultEnv.withWorkspaceName(workspace.name), .emptyStdin)
 
-        XCTAssertNil(workspace.normalizationOverride[.oppositeOrientationForNestedContainers])
+        #expect(workspace.normalizationOverride[.oppositeOrientationForNestedContainers] == nil)
     }
 
     /// Repeating 'on' when the override is already set is a noop: without
     /// --fail-if-noop the command reports it on stderr and succeeds, following
     /// the same convention as the 'enable' and 'workspace' commands.
-    func testCommand_on_noop_succeedsWithoutFailIfNoop() async throws {
-        let workspace = focus.workspace
+    @Test func testCommand_on_noop_succeedsWithoutFailIfNoop() async {
+        let workspace = globalFocus.workspace
         workspace.normalizationOverride[.oppositeOrientationForNestedContainers] = true
 
-        let result = try await parseCommand("enable-normalization opposite-orientation-for-nested-containers on").cmdOrDie
-            .run(.defaultEnv.copy(\.workspaceName, workspace.name), .emptyStdin)
+        let result = await parseCommand("enable-normalization opposite-orientation-for-nested-containers on").cmdOrDie
+            .run(.defaultEnv.withWorkspaceName(workspace.name), .emptyStdin)
 
         assertEquals(result.exitCode.rawValue, 0)
-        XCTAssertFalse(result.stderr.isEmpty, "noop must be reported on stderr")
+        #expect(!result.stderr.isEmpty, "noop must be reported on stderr")
         assertEquals(workspace.normalizationOverride[.oppositeOrientationForNestedContainers], true)
     }
 
-    func testCommand_on_noop_failsWithFailIfNoop() async throws {
-        let workspace = focus.workspace
+    @Test func testCommand_on_noop_failsWithFailIfNoop() async {
+        let workspace = globalFocus.workspace
         workspace.normalizationOverride[.oppositeOrientationForNestedContainers] = true
 
-        let result = try await parseCommand("enable-normalization opposite-orientation-for-nested-containers on --fail-if-noop").cmdOrDie
-            .run(.defaultEnv.copy(\.workspaceName, workspace.name), .emptyStdin)
+        let result = await parseCommand("enable-normalization opposite-orientation-for-nested-containers on --fail-if-noop").cmdOrDie
+            .run(.defaultEnv.withWorkspaceName(workspace.name), .emptyStdin)
 
         assertEquals(result.exitCode.rawValue, 2)
     }
 
     /// '--workspace <name>' targets a non-focused workspace without leaking the
     /// override onto the focused one. Without the flag the command would fall
-    /// through to `focus.workspace`.
-    func testCommand_withWorkspaceFlag_targetsNonFocusedWorkspace() async throws {
-        // Hardcoded simple name so WorkspaceName.parse accepts it; XCTest's
+    /// through to `globalFocus.workspace`.
+    @Test func testCommand_withWorkspaceFlag_targetsNonFocusedWorkspace() async {
+        // Hardcoded simple name so WorkspaceName.parse accepts it; the test's
         // 'name' property contains brackets that are not legal in workspace
         // names.
         let otherName = "ws-flag-target"
-        let focused = focus.workspace
+        let focused = globalFocus.workspace
         let other = Workspace.get(byName: otherName)
         assertNotEquals(focused.name, other.name)
         // A window keeps 'other' out of the doomed-workspace refusal: overrides
         // can only be set on workspaces that survive garbage collection.
         TestWindow.new(id: 1, parent: other.rootTilingContainer)
 
-        _ = try await parseCommand("enable-normalization --workspace \(otherName) opposite-orientation-for-nested-containers off").cmdOrDie
+        _ = await parseCommand("enable-normalization --workspace \(otherName) opposite-orientation-for-nested-containers off").cmdOrDie
             .run(.defaultEnv, .emptyStdin)
 
         assertEquals(other.normalizationOverride[.oppositeOrientationForNestedContainers], false)
-        XCTAssertNil(focused.normalizationOverride[.oppositeOrientationForNestedContainers], "override must not leak to the focused workspace")
+        #expect(focused.normalizationOverride[.oppositeOrientationForNestedContainers] == nil, "override must not leak to the focused workspace")
     }
 
     /// Setting an override on a workspace that garbage collection is about to
     /// destroy would silently have no effect, so the command refuses instead.
-    func testCommand_onEmptyInvisibleWorkspace_fails() async throws {
+    @Test func testCommand_onEmptyInvisibleWorkspace_fails() async {
         let doomedName = "ws-doomed"
 
-        let result = try await parseCommand("enable-normalization --workspace \(doomedName) flatten-containers on").cmdOrDie
+        let result = await parseCommand("enable-normalization --workspace \(doomedName) flatten-containers on").cmdOrDie
             .run(.defaultEnv, .emptyStdin)
 
         assertEquals(result.exitCode.rawValue, 2)
-        XCTAssertFalse(result.stderr.isEmpty, "refusal must be explained on stderr")
-        XCTAssertNil(Workspace.get(byName: doomedName).normalizationOverride[.flattenContainers])
+        #expect(!result.stderr.isEmpty, "refusal must be explained on stderr")
+        #expect(Workspace.get(byName: doomedName).normalizationOverride[.flattenContainers] == nil)
     }
 }

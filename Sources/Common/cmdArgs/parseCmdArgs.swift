@@ -11,7 +11,7 @@ public func parseCmdArgs(_ args: StrArrSlice) -> ParsedCmd<any CmdArgs> {
 }
 
 public protocol CmdArgs:
-    ConvenienceCopyable,
+    Withable,
     Equatable,
     CustomStringConvertible,
     AeroAny,
@@ -22,10 +22,11 @@ public protocol CmdArgs:
     var commonState: CmdArgsCommonState { get set }
 }
 
-public struct CmdArgsCommonState: ConvenienceCopyable, Equatable, Sendable {
+public struct CmdArgsCommonState: Withable, Equatable, Sendable {
     let rawArgsForStrRepr: EquatableNoop<StrArrSlice>
-    var windowId: UInt32? = nil
+    var windowId: OpaqueWindowId? = nil
     var workspaceName: WorkspaceName? = nil
+    public var explicitStdinFlag: Bool? = nil
 
     public init(_ raw: StrArrSlice) { rawArgsForStrRepr = .init(raw) }
 }
@@ -33,7 +34,7 @@ public struct CmdArgsCommonState: ConvenienceCopyable, Equatable, Sendable {
 extension CmdArgs {
     public static var info: CmdStaticInfo { Self.parser.info }
 
-    public var windowId: UInt32? {
+    public var windowId: OpaqueWindowId? {
         get { commonState.windowId }
         set(value) { commonState.windowId = value }
     }
@@ -63,35 +64,34 @@ public struct CmdParser<Root>: Sendable {
     let info: CmdStaticInfo
     let flags: [String: any ArgParserProtocol<SubArgParserInput, Root, ()>]
     let positionalArgs: [any ArgParserProtocol<PosArgParserInput, Root, PosArgParserContext>]
-    let conflictingOptions: [Set<String>]
+    let conflictingFlags: [Set<String>]
+    let flagAllowlist: [String: Set<String>]
 
     init(
         kind: CmdKind,
-        allowInConfig: Bool,
         help: String,
         flags: [String: any ArgParserProtocol<SubArgParserInput, Root, ()>],
         posArgs: [any ArgParserProtocol<PosArgParserInput, Root, PosArgParserContext>],
-        conflictingOptions: [Set<String>] = [],
+        conflictingFlags: [Set<String>] = [],
+        flagAllowlist: [String: Set<String>] = [:],
     ) {
-        self.info = CmdStaticInfo(help: help, kind: kind, allowInConfig: allowInConfig)
+        self.info = CmdStaticInfo(help: help, kind: kind)
         self.flags = flags
         self.positionalArgs = posArgs
-        self.conflictingOptions = conflictingOptions
+        self.conflictingFlags = conflictingFlags
+        self.flagAllowlist = flagAllowlist
     }
 }
 
 public struct CmdStaticInfo: Equatable, Sendable {
     public let help: String
     public let kind: CmdKind
-    public let allowInConfig: Bool // Query commands are prohibited in config
 
     public init(
         help: String,
         kind: CmdKind,
-        allowInConfig: Bool,
     ) {
         self.help = help
         self.kind = kind
-        self.allowInConfig = allowInConfig
     }
 }

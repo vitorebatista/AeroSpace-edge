@@ -14,12 +14,23 @@ aerospace-edge -h;
 
     | close-all-windows-but-current [--quit-if-last-window]
 
+    | config [--json | --keys]... --get {{{ aerospace-edge config --major-keys }}} [--json | --keys]...
+    | config --major-keys
+    | config --all-keys
+    | config --config-path
+
+    | debug-windows [--window-id <window_id>|--app-bundle-id <app_bundle_id>]
+
+    | echo [--stderr|--window-id <window_id>]... --
+
     | enable toggle
     | enable [--fail-if-noop] on [--fail-if-noop]
     | enable [--fail-if-noop] off [--fail-if-noop]
 
     | enable-normalization [--workspace <workspace>|--fail-if-noop]... <normalization_kind> (on|off) [--workspace <workspace>|--fail-if-noop]...
     | enable-normalization [--workspace <workspace>] <normalization_kind> (toggle|reset) [--workspace <workspace>]
+
+    | eval [--stdin]
 
     | false
 
@@ -38,11 +49,11 @@ aerospace-edge -h;
 
     | fullscreen [--no-outer-gaps|--window-id <window_id>]...
     | fullscreen [--no-outer-gaps|--fail-if-noop|--window-id <window_id>]... on [--no-outer-gaps|--fail-if-noop|--window-id <window_id>]...
-    | fullscreen [--fail-if-noop|--window-id <window_id>] off [--fail-if-noop|--window-id <window_id>]
+    | fullscreen [--fail-if-noop|--window-id <window_id>]... off [--fail-if-noop|--window-id <window_id>]...
 
     | join-with [--window-id <window_id>] (left|down|up|right)
 
-    | layout [--window-id <window_id>|--root] (h_tiles|v_tiles|h_accordion|v_accordion|tiles|accordion|horizontal|vertical|tiling|floating|sticky)...
+    | layout [--window-id <window_id>|--root|--workspace <workspace>|--fail-if-noop]... (<layouts>)... [--window-id <window_id>|--root|--workspace <workspace>|--fail-if-noop]...
     | layout (--for-next-detected-window|tiling|floating)...
 
     | macos-native-fullscreen [--fail-if-noop|--window-id <window_id>]... [on|off] [--fail-if-noop|--window-id <window_id>]...
@@ -68,11 +79,15 @@ aerospace-edge -h;
 
     | resize [--window-id <window_id>] (smart|smart-opposite|width|height) [+|-]<number> [--window-id <window_id>]
 
+    | run-callback [--for-every-window|--window-id <window_id>]... on-window-detected [--for-every-window|--window-id <window_id>]...
+    | run-callback (on-focus-changed|on-focused-monitor-changed)
+
     | split [--window-id <window_id>] (horizontal|vertical|opposite) [--window-id <window_id>]
 
     | swap [--swap-focus|--wrap-around|--window-id <window_id>]... (left|down|up|right|dfs-next|dfs-prev) [--swap-focus|--wrap-around|--window-id <window_id>]...
 
-    | test <output_format> (.=|/=|.~|/~) <output_format>
+    | test <output_format> (=|~=) <output_format>
+    | test-not <output_format> (=|~=) <output_format>
 
     | true
 
@@ -86,16 +101,9 @@ aerospace-edge -h;
     | volume [--no-gui] set <number> [--no-gui]
 
     | workspace [--auto-back-and-forth|--fail-if-noop]... <workspace> [--auto-back-and-forth|--fail-if-noop]...
-    | workspace [--wrap-around|--stdin|--no-stdin] (next|prev) [--wrap-around|--stdin|--no-stdin]
+    | workspace [--wrap-around|--stdin|--no-stdin]... (next|prev) [--wrap-around|--stdin|--no-stdin]...
 
     | workspace-back-and-forth
-
-    | config [--json | --keys]... --get {{{ aerospace-edge config --major-keys }}} [--json | --keys]...
-    | config --major-keys
-    | config --all-keys
-    | config --config-path
-
-    | debug-windows [--window-id <window_id>|--app-bundle-id <app_bundle_id>]
 
     | list-apps [--macos-native-hidden [no] | --format <output_format> | --count | --json]...
 
@@ -106,10 +114,10 @@ aerospace-edge -h;
     | list-monitors [--focused [no] | --mouse [no] | --format <output_format> | --count | --json]...
 
     | list-windows [<list_windows_filter_flag> | --format <output_format> | --count | --json | --sort <sort_option>]...
-    | list-windows [--format <output_format>|--count|--json|--sort <sort_option>] (--all|--focused) [--format <output_format>|--count|--json|--sort <sort_option>]
+    | list-windows [--format <output_format>|--count|--json|--sort <sort_option>]... (--all|--focused) [--format <output_format>|--count|--json|--sort <sort_option>]...
 
     | list-workspaces [<list_workspaces1_flag>]... --monitor <monitor_id>... [<list_workspaces1_flag>]...
-    | list-workspaces [--format <output_format>|--count|--json] (--all|--focused) [--format <output_format>|--count|--json]
+    | list-workspaces [--format <output_format>|--count|--json]... (--all|--focused) [--format <output_format>|--count|--json]...
 
     | subscribe [--all|--no-send-initial] <event>... [--all|--no-send-initial]
     ;
@@ -121,16 +129,19 @@ aerospace-edge -h;
 <number> ::= {{{ true }}};
 <monitor_pattern> ::= {{{ true }}};
 <normalization_kind> ::= flatten-containers|opposite-orientation-for-nested-containers;
+<layouts> ::= h_tiles|v_tiles|h_accordion|v_accordion|tiles|accordion|horizontal|vertical|tiling|floating|sticky;
 
 <list_workspaces1_flag> ::= --visible [no] | --empty [no] | --format <output_format> | --format <output_format> | --count | --json;
 
-<move_command_flag> ::= --window-id <window_id> | --boundaries <boundary> | --boundaries-action <move_boundaries_action>;
+<move_command_flag> ::= --window-id <window_id> | --boundaries <boundary> | --boundaries-action <move_boundaries_action>
+    | --fail-if-fullscreen | --fail-if-macos-native-fullscreen;
 <move_boundaries_action> ::= stop|fail|create-implicit-container|create-implicit-container-or-fail;
 
 <move_node_to_monitor1_flag> ::= --window-id <window_id>|--focus-follows-window|--fail-if-noop|--wrap-around;
 <move_node_to_monitor2_flag> ::= --window-id <window_id>|--focus-follows-window|--fail-if-noop;
 
-<focus_direction_flag> ::= --boundaries <boundary>|--boundaries-action <boundaries_action>|--ignore-floating|--wrap-around;
+<focus_direction_flag> ::= --boundaries <boundary>|--boundaries-action <boundaries_action>|--ignore-floating|--wrap-around
+    | --fail-if-fullscreen | --fail-if-macos-native-fullscreen;
 <focus_dfs_relative_flag> ::= --boundaries-action <boundaries_action>|--ignore-floating|--wrap-around;
 <boundaries_action> ::= stop|fail|wrap-around-the-workspace|wrap-around-all-monitors;
 <boundary> ::= workspace|all-monitors-outer-frame;

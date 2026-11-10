@@ -1,8 +1,9 @@
 @testable import AppBundle
+import AppKit
 import Common
 import Foundation
 import HotKey
-import XCTest
+import Testing
 
 let projectRoot: URL = {
     var url = URL(filePath: #filePath).absoluteURL
@@ -13,11 +14,39 @@ let projectRoot: URL = {
     return url
 }()
 
+var name: String { Test.current.orDie().name }
+
+extension Trait where Self == SerializedGloballyTrait {
+    // todo: make tests parallel
+    static var serializedGlobally: Self { SerializedGloballyTrait() }
+}
+
+struct SerializedGloballyTrait: SuiteTrait, TestTrait, TestScoping {
+    var isRecursive: Bool { true }
+
+    @concurrent func provideScope(for test: Test, testCase: Test.Case?, performing function: @concurrent @Sendable () async throws -> Void) async throws {
+        try await runExclusively(function)
+    }
+}
+
+@MainActor private var previousTestCompletion: Task<Void, Never>? = nil
+
+// todo: that's a cool serialization trick AI came up with.
+// - I need to think if I need to serialize refreshing sessions like this
+// - I also need to understand how it relates to AwaitableOneTimeLatch
+@MainActor private func runExclusively(_ body: @concurrent @Sendable () async throws -> Void) async throws {
+    let previous = previousTestCompletion
+    let (completion, completionContinuation) = AsyncStream<Never>.makeStream()
+    previousTestCompletion = Task.startUnstructured { for await _ in completion {} }
+    defer { completionContinuation.finish() }
+    await previous?.value
+    try await body()
+}
+
 @MainActor
 func setUpWorkspacesForTests() {
-    unsafe monitorsForTests = []
-    gcMonitors() // Forget monitors left by display configuration tests
     unsafe monitorsForTests = nil
+    gcMonitors() // Forget monitors left by display configuration tests (an empty list would be ignored)
     config = defaultConfig
     configUrl = defaultConfigUrl
     config.enableNormalizationFlattenContainers = false // Make layout tests more predictable
@@ -36,13 +65,14 @@ func setUpWorkspacesForTests() {
     }
     check(Workspace.get(byName: "setUpWorkspacesForTests").focusWorkspace())
     Workspace.garbageCollectUnusedWorkspaces()
-    check(focus.workspace.isEffectivelyEmpty)
-    check(focus.workspace === Workspace.all.singleOrNil(), Workspace.all.map(\.description).joined(separator: ", "))
-    check(mainMonitor.setActiveWorkspace(focus.workspace))
+    check(globalFocus.workspace.isEffectivelyEmpty)
+    check(globalFocus.workspace === Workspace.all.singleOrNil(), Workspace.all.map(\.description).joined(separator: ", "))
+    check(mainMonitorInfo.setVisibleWorkspace(globalFocus.workspace))
 
-    layoutForNextDetectedWindow = nil
     TestApp.shared.focusedWindow = nil
     TestApp.shared.windows = []
+
+    global_layoutForNextDetectedWindow = nil
 }
 
 extension ParsedCmd {
@@ -56,13 +86,18 @@ extension ParsedCmd {
     var cmdOrDie: T { cmdOrNil ?? dieT("\(self)") }
 }
 
-func testParseCommandFail(_ command: String, msg expectedMsg: String, exitCode expectedExitCode: Int32, file: String = #filePath, line: Int = #line) {
+extension ParsedCmd where T == Shell<any Command> {
+    /// The command, if the input parsed to exactly one command (not a shell compound)
+    var singleCmdOrNil: (any Command)? { cmdOrNil?.flatten().singleOrNil() }
+}
+
+func testParseCommandFail(_ command: String, msg expectedMsg: String, exitCode expectedExitCode: Int32, sourceLocation: SourceLocation = #_sourceLocation) {
     let parsed = parseCommand(command)
     switch parsed {
-        case .cmd(let command): XCTFail("\(command) isn't supposed to be parcelable")
+        case .cmd(let command): Issue.record(Comment(rawValue: "\(command) isn't supposed to be parcelable"))
         case .help: die() // todo test help
         case .failure(let failure):
-            assertEquals(failure, .init(expectedMsg, expectedExitCode), file: file, line: line)
+            assertEquals(failure, .init(expectedMsg, expectedExitCode), sourceLocation: sourceLocation)
     }
 }
 
@@ -89,10 +124,24 @@ extension MoveNodeToWorkspaceCmdArgs {
 }
 
 extension HotkeyBinding {
-    init(_ modifiers: NSEvent.ModifierFlags, _ keyCode: Key, _ commands: [any Command]) {
+    init(_ modifiers: NSEvent.ModifierFlags, _ keyCode: Key, _ commands: Shell<any Command>) {
         let descriptionWithKeyNotation = modifiers.isEmpty
             ? keyCode.toString()
             : modifiers.toString() + "-" + keyCode.toString()
         self.init(modifiers, keyCode, commands, descriptionWithKeyNotation: descriptionWithKeyNotation)
     }
 }
+
+extension FocusCommand {
+    static func new(direction: CardinalDirection) -> FocusCommand {
+        FocusCommand(args: FocusCmdArgs(rawArgs: [], cardinalOrDfsDirection: .direction(direction)))
+    }
+}
+
+/// Fork tests destructure the parse result as `let (config, errors) = ...`; upstream's parseConfig returns ParseConfigResult
+@MainActor func parseConfigTuple(_ rawToml: String) -> (config: Config, errors: [ConfigParseDiagnostic]) {
+    let result = parseConfig(rawToml)
+    return (result.config, result.errors)
+}
+
+func parseCommand(_ raw: String) -> ParsedCmd<Shell<any Command>> { parseCommand(raw, allowExecAndForget: true, allowEval: true) }

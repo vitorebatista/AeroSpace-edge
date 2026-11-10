@@ -7,7 +7,7 @@ open class TreeNode: Equatable, AeroAny {
     fileprivate final weak var _parent: NonLeafTreeNodeObject? = nil
     final var parent: NonLeafTreeNodeObject? { _parent }
     private var adaptiveWeight: CGFloat
-    private let _mruChildren: MruStack<TreeNode> = MruStack()
+    let _mruChildren: MruStack<TreeNode> = MruStack()
     // Usages:
     // - resize with mouse
     // - makeFloatingWindowsSeenAsTiling in focus command
@@ -16,7 +16,8 @@ open class TreeNode: Equatable, AeroAny {
     // - resize with mouse
     // - drag window with mouse
     // - move-mouse command
-    // - layoutRecursive: skip redundant AX frame writes when the target rect didn't change
+    // - focus-follows-mouse
+    // - layoutRecursive: skip redundant AX frame writes when the target rect did not change (fork #90)
     var lastAppliedLayoutPhysicalRect: Rect? = nil // with real inner gaps
     final var unboundStacktrace: String? = nil
     var isBound: Bool { parent != nil } // todo drop, once https://github.com/nikitabobko/AeroSpace/issues/1215 is fixed
@@ -67,6 +68,10 @@ open class TreeNode: Equatable, AeroAny {
     @MainActor
     @discardableResult
     func bind(to newParent: NonLeafTreeNodeObject, adaptiveWeight: CGFloat, index: Int) -> BindingData? {
+        if isDebug, let newParent = newParent as? TilingContainer, newParent.lifeStatus != .alive {
+            die("Binding is possible only to alive TilingContainers")
+        }
+
         let result = unbindIfBound()
 
         if newParent === NilTreeNode.instance {
@@ -74,13 +79,14 @@ open class TreeNode: Equatable, AeroAny {
         }
         let relation = getChildParentRelation(child: self, parent: newParent) // Side effect: verify relation
         if adaptiveWeight == WEIGHT_AUTO {
-            self.adaptiveWeight = switch relation {
+            switch relation {
                 case .tiling(let newParent):
-                    CGFloat(newParent.children.sumOfDouble { $0.getWeight(newParent.orientation) }).div(newParent.children.count) ?? 1
+                    let newParentInhabitedChildren = newParent.inhabitedChildren
+                    self.adaptiveWeight = CGFloat(newParentInhabitedChildren.sumOfDouble { $0.getWeight(newParent.orientation) }).div(newParentInhabitedChildren.count) ?? 1
                 case .floatingWindow, .macosNativeFullscreenWindow,
                      .rootTilingContainer, .macosNativeMinimizedWindow,
                      .shimContainerRelation, .macosPopupWindow, .macosNativeHiddenAppWindow:
-                    WEIGHT_DOESNT_MATTER
+                    self.adaptiveWeight = WEIGHT_DOESNT_MATTER
             }
         } else {
             self.adaptiveWeight = adaptiveWeight
@@ -117,9 +123,17 @@ open class TreeNode: Equatable, AeroAny {
 
     var mruChildren: MruStack<TreeNode> { _mruChildren }
 
+    var mostRecentInhabitedChild: TreeNode? {
+        _mruChildren.first { $0.tilingTreeNodeCasesOrDie().isInhabited } ?? inhabitedChildren.last
+    }
+
+    var inhabitedChildren: [TreeNode] {
+        children.filter { $0.tilingTreeNodeCasesOrDie().isInhabited }
+    }
+
     @discardableResult
     func unbindFromParent() -> BindingData {
-        unbindIfBound() ?? dieT("\(self) is already unbound. The stacktrace where it was unbound:\n\(unboundStacktrace ?? "nil")")
+        unbindIfBound() ?? dieT("\(self) is already unbound. The stacktrace where it was unbound:\n\(unboundStacktrace.prettyDescription)")
     }
 
     nonisolated public static func == (lhs: TreeNode, rhs: TreeNode) -> Bool {

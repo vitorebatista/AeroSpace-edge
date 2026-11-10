@@ -8,7 +8,7 @@ func startUnixSocketServer() {
     params.requiredLocalEndpoint = .unix(path: socketPath)
     let listener = Result { try NWListener(using: params) }.getOrDie()
     listener.newConnectionHandler = { connection in
-        Task {
+        Task.startUnstructured {
             defer { connection.cancel() }
             connection.start(queue: .global())
             await newConnection(connection)
@@ -43,32 +43,22 @@ private func newConnection(_ connection: NWConnection) async { // todo add exit 
         _ = await connection.writeAtomic(ans)
     }
 
-    guard let clientVersion = await connection.readUInt32().getOrNil() else { return }
+    guard let clientVersion = await connection.readUInt32().getIgnoringErrorsOrNil() else { return }
     // The server unconditionally answers with the only version it supports
     if await connection.writeUInt32(SOCKET_PROTOCOL_VERSION).error != nil { return }
     if clientVersion != SOCKET_PROTOCOL_VERSION { return }
 
     while true {
-        let rawRequest: Data
-        switch await connection.readNonAtomic() {
-            case .success(let _rawRequest): rawRequest = _rawRequest
-            case .failure(let error):
-                await answerToClient(exitCode: EXIT_CODE_TWO, stderr: "Error: \(error)")
-                return
-        }
-        let request: ClientRequest
-        switch ClientRequest.decodeJson(rawRequest) {
-            case .success(let _request): request = _request
-            case .failure(let error):
-                await answerToClient(
-                    exitCode: EXIT_CODE_TWO,
-                    stderr: """
-                        Can't parse request \(String(describing: String(data: rawRequest, encoding: .utf8)).singleQuoted).
-                        Error: \(error)
-                        """,
-                )
-                continue
-        }
+        guard let rawRequest = await connection.readNonAtomic().getOrNil(onFailure: { err in
+            await answerToClient(exitCode: EXIT_CODE_TWO, stderr: "Error: \(err)")
+        }) else { return }
+        guard let request = await ClientRequest.decodeJson(rawRequest).getOrNil(onFailure: { err in
+            let msg = """
+                Can't parse request \(String(describing: String(data: rawRequest, encoding: .utf8)).singleQuoted).
+                Error: \(err)
+                """
+            return await answerToClient(exitCode: EXIT_CODE_TWO, stderr: msg)
+        }) else { continue }
         // Handle subscribe before parseCommand (subscribe doesn't have a Command impl)
         if request.args.first == "subscribe" {
             switch parseSubscribeCmdArgs(request.args.slice(1...).orDie()) {
@@ -94,31 +84,30 @@ private func newConnection(_ connection: NWConnection) async { // todo add exit 
             case .failure(let err):
                 await answerToClient(exitCode: err.exitCode, stderr: err.msg)
                 continue
-            case .cmd(let command) where command.isExec:
-                await answerToClient(exitCode: EXIT_CODE_TWO, stderr: "exec-and-forget is prohibited in CLI")
-                continue
             case .cmd(let command):
-                let _answer: Result<ServerAnswer, Error> = await Result {
-                    try await runLightSession(.socketServer(command.args), token) { () throws in
-                        let env = CmdEnv.init(
-                            windowId: request.windowId.flattenOptional(),
-                            workspaceName: request.workspace.flattenOptional(),
-                        )
-                        let cmdResult = try await command.run(env, CmdStdin(request.stdin))
-                        return ServerAnswer(
-                            exitCode: cmdResult.exitCode.rawValue,
-                            stdout: cmdResult.stdout.joined(separator: "\n"),
-                            stderr: cmdResult.stderr.joined(separator: "\n"),
+                var answer: ServerAnswer =
+                    await Result {
+                        try await runLightSession(.socketServer(command.args), token) { () throws in
+                            let env = CmdEnv.init(
+                                windowId: request.windowId.flattenOptional(),
+                                workspaceName: request.workspace.flattenOptional(),
+                            )
+                            let cmdResult = await command.run(env, CmdStdin(request.stdin))
+                            return ServerAnswer(
+                                exitCode: cmdResult.exitCode.rawValue,
+                                stdout: cmdResult.stdout.joined(separator: "\n"),
+                                stderr: cmdResult.stderr.joined(separator: "\n"),
+                                serverVersionAndHash: serverVersionAndHash,
+                            )
+                        }
+                    }
+                    .get { err in
+                        ServerAnswer(
+                            exitCode: command.args.failExitCode,
+                            stderr: "Fail to await main thread. \(err.localizedDescription)",
                             serverVersionAndHash: serverVersionAndHash,
                         )
                     }
-                }
-                var answer = _answer.getOrNil() ??
-                    ServerAnswer(
-                        exitCode: command.args.failExitCode,
-                        stderr: "Fail to await main thread. \(_answer.failureOrNil?.localizedDescription ?? "")",
-                        serverVersionAndHash: serverVersionAndHash,
-                    )
                 if request.windowId == nil || request.workspace == nil {
                     answer.stderr += "\n\nAeroSpace client has sent incomplete JSON request. 'windowId' or/and 'workspace' fields are missing. Please forward your AEROSPACE_WINDOW_ID and AEROSPACE_WORKSPACE environment variables to these JSON fields. If the appropriate environment variables are empty, pass explicit 'null' in the JSON."
                 }

@@ -10,10 +10,13 @@ Maintainer runbook for the `vitorebatista/AeroSpace-edge` fork. All credit for A
 
 ## The fork model
 
-- The fork does **not** blindly track upstream `main`. It sits on a fixed **upstream base commit**
-  plus a curated set of **backported bug fixes / small features**, each merged as its own PR.
-- We intentionally **skip** large refactors and features that would conflict with the curated
-  backports (see "Deliberately not ported" below).
+- **Since the 2026-11 full resync the fork tracks upstream `main` by merging it.** Each sync merges
+  `upstream/main` into a `resync/<date>` branch, resolves the conflicts (upstream wins on structure;
+  every fork behaviour survives, re-expressed on upstream's APIs), and lands as one PR. Before that
+  resync the fork sat on a fixed base commit (`63e0976b`) plus curated backports.
+- **Unmerged upstream PRs** (bug fixes / small features) are still backported one by one, each as its
+  own PR on a `port/<slug>` branch. Large or risky open PRs are still skipped unless requested (see
+  "Deliberately not ported" below).
 - `origin` = `vitorebatista/AeroSpace-edge` (the fork). `upstream` = `nikitabobko/AeroSpace`.
   **Renamed 2026-08-27** from `vitorebatista/AeroSpace`; GitHub redirects the old URL, but use the new
   name in commands. The fork deliberately uses the `vitorebatista.aerospace-edge` bundle id,
@@ -23,7 +26,11 @@ Maintainer runbook for the `vitorebatista/AeroSpace-edge` fork. All credit for A
 
 ## Sync state (update this section every sync)
 
-- **Upstream base commit:** `63e0976b` (the fork branched from upstream `main` here).
+- **Upstream base (last merged upstream `main`):** `0921fb81`, merged by the full resync
+  (branch `resync/upstream-main`, 2026-11-09). Everything on upstream `main` up to and including
+  `0921fb81` is in the fork. The original branch point was `63e0976b`. The **"track upstream main"
+  milestone is done**: the entries under "Deliberately NOT ported" that were deferred to it are now
+  merged (marked below). The next sync is `git merge upstream/main` (see "Updating the fork").
 - **Last upstream review point:** upstream `main` @ `0921fb81`, 115 open upstream PRs (open PRs
   reviewed up to #2385), reviewed 2026-11-09. New work after this point is what a future sync should
   look at. The 2026-11-09 sync found about 150 new `main` commits (`c548c7f8..0921fb81`) and about 60
@@ -121,12 +128,12 @@ focus, #35), `3e381925` (env-var docs, #36), `cfd4eab2` (menu-bar focus steal, #
 ### Deliberately NOT ported (skip unless explicitly requested)
 - Upstream PR **#2114** "Add sticky window support" — duplicate of our `layout sticky` (PR #2083/#21).
 - Upstream PR **#2108** "cycle window size at edge" — conflicts; not requested.
-- Large upstream-`main` refactors after our base: the `on-window-detected[*].if` type change
+- ~~Large upstream-`main` refactors after our base~~ **merged by the 2026-11 full resync**: the `on-window-detected[*].if` type change
   (TOML table → arbitrary command), the `InterVar` → typed-enum refactor, the
   `ConfigParseError` → `ConfigParseDiagnostic` rework, the Swift bump. These conflict with several
   curated backports. Pulling them in = a **full resync milestone**, not a quick PR — only do it if
   the user explicitly asks to "track upstream main."
-- Upstream-`main` refactor chain merged 2026-06-10..06-14 (reviewed 2026-06-15, all part of the
+- **Merged by the 2026-11 full resync:** upstream-`main` refactor chain merged 2026-06-10..06-14 (reviewed 2026-06-15, all part of the
   "track upstream main" milestone, not quick PRs):
   - `4242863b`/`cf6244e7`/`61f0eac9`/`cd64d085` — `ParseConfigResult.errors` → `ConfigParseDiagnostic`
     + readConfig return-type rework (the same family as the `ConfigParseDiagnostic` item above).
@@ -136,11 +143,11 @@ focus, #35), `3e381925` (env-var docs, #36), `cfd4eab2` (menu-bar focus steal, #
     config-syntax change).
   - `5e37ec0a`/`90347dbb`/`f1f50259` — tree-structure refactor (FloatingWindowsContainer,
     TilingContainerParentCases) — 21-file refactor.
-- Upstream **`layout --root` / `--workspace` / empty-workspace** feature set (`11ba9150`, `91064acc`,
+- **Merged by the 2026-11 full resync** (upstream's `--root` replaced the fork's): upstream **`layout --root` / `--workspace` / empty-workspace** feature set (`11ba9150`, `91064acc`,
   `bb1e5429`, completion fix `4ad2a573`) — features whose semantics sit on top of the `5e37ec0a` tree
   refactor above; can't be cleanly backported without dragging in the refactor. Skipped 2026-06-15
   (not requested). Revisit if/when a full resync happens.
-- Upstream-`main` refactor/feature chain merged 2026-06-15..06-26 (reviewed 2026-06-29, all part of
+- **Merged by the 2026-11 full resync:** upstream-`main` refactor/feature chain merged 2026-06-15..06-26 (reviewed 2026-06-29, all part of
   the "track upstream main" milestone, not quick PRs):
   - **eval/echo command family** (`82ee061c`, `f0c5ab43`, `5c9fc889`, `dac4671a`, `93b65b2d`,
     `0f0a1c80`, `588b1df1`, `6aad5704`, `c69087ec`, `b8e8dbba`, `63df9215`, `88e13b37`, `4b1c4c4c`)
@@ -156,7 +163,8 @@ focus, #35), `3e381925` (env-var docs, #36), `cfd4eab2` (menu-bar focus steal, #
     (`1aeb8090`/`73a9137c`/`6e472aa3`/`310bd8e1`), accessibility-permission flow (`fb8b1df6`),
     `onWorkspaceChanged` self-conflicting-focus guard (`dd61a340` — already ported as #35).
   - Website/docs-only (`d14b4314`, `3d7fee52`, `61c874bc`, `6e4a2d2c`) and CI (`7d2654d5`).
-- Upstream-`main` chain reviewed 2026-07-10 (`fb8b1df6..649301b2`), deferred to a full resync:
+- **Merged by the 2026-11 full resync** (`269dc71b` sits under the fork's throttle, which stays):
+  upstream-`main` chain reviewed 2026-07-10 (`fb8b1df6..649301b2`), deferred to a full resync:
   - **focus-follows-mouse** feature (`747e1a97`, `f486beb2`, `9727340a`, `2dc0c786`) — deferred feature.
   - **`ef54f6c5`** (shell: allow comments after backslash) and **`f1cef2eb`** (drop stale
     `ShellParserGenerated`) — both target upstream's hand-written `shellLexer.swift`; the fork still
@@ -172,7 +180,7 @@ focus, #35), `3e381925` (env-var docs, #36), `cfd4eab2` (menu-bar focus steal, #
     socket-protocol guide section. **`e1310b5d`** (bugPrompt graceful/deadly logging), **`5be63812`**
     (update axDumps) — minor upstream-only tooling/data.
 - Reviewed 2026-07-14 (`649301b2..d56e1637` + open PRs), deferred (not requested / risky):
-  - `a52896b3` (default-config: shorten terminal-launch script) — cosmetic default-config change.
+  - ~~`a52896b3` (default-config: shorten terminal-launch script)~~ — merged by the 2026-11 full resync.
   - Upstream PR **#2174** "Restore windows after native fullscreen" (422 lines) — large feature.
   - Upstream PR **#2176** "add get_tree command" — new command/feature.
   - Upstream PR **#2179** "focus cross-monitor window via private SkyLight API" — risky (private API,
@@ -187,23 +195,25 @@ focus, #35), `3e381925` (env-var docs, #36), `cfd4eab2` (menu-bar focus steal, #
   - Upstream PR **#2190**'s follow-up `bsp-shape` normalizer (mentioned in the PR, not yet posted) —
     revisit when/if upstream opens it.
 - Reviewed 2026-08-27 (`d56e1637..c548c7f8` + 17 new open PRs), deferred:
-  - Upstream `main` `c548c7f8` (`Monitor` → `MonitorInfo` rename) — refactor, belongs to the "track
-    upstream main" milestone. `ae2aa7aa` (auto-label incoming PRs) — upstream-only CI.
+  - ~~Upstream `main` `c548c7f8` (`Monitor` → `MonitorInfo` rename)~~ — merged by the 2026-11 full
+    resync. `ae2aa7aa` (auto-label incoming PRs) — merged, but the workflow file is deleted in the fork
+    (upstream-only CI).
   - Upstream PRs **#2238** and **#2245** (focus-follows-mouse over Control Center / transient
-    overlays) — **not portable**: both patch `Sources/AppBundle/mouse/focusFollowsMouse.swift`, and
-    the fork never ported the focus-follows-mouse feature (deferred 2026-07-10). Revisit only if
-    that feature is ever backported.
+    overlays) — were not portable because the fork lacked focus-follows-mouse. **The 2026-11 resync
+    brought focus-follows-mouse in**, so they are now portable if upstream merges them or the user asks.
   - Upstream PR **#2220** ("on-window-detected 'layout floating' leaves the window at its tile
     origin") — **duplicate**: the fork already fixed this via upstream #2024 (fork commit
     `bad62837`, `isAwaitingOnWindowDetected`). The only delta #2220 adds on top is excluding
     awaiting windows from `layoutAccordion`'s index/padding math; marginal, and #2220 is unmerged.
-  - Upstream PR **#2213** ("focus can land on a different window of the same app") — **conflicts
+  - Upstream PR **#2213** ("focus can land on a different window of the same app") — fork PR #59 is
+    gone since the 2026-11 resync (upstream's native tabs replaced it), so the original conflict no
+    longer applies; re-triage if upstream merges it. Original note — **conflicts
     with fork PR #59**: it deletes `MacApp.lastNativeFocusedWindowId`, which the #2225 native-tab
     backport depends on. Also `mergeable=dirty` upstream, needs `Task.startUnstructured` (absent in
     the fork), and overlaps the fork's own `focus-follows-app-activation` feature. Revisit if
     upstream merges it.
-  - Upstream PR **#2206** ("Fix native tab window replacement") — competing implementation of the
-    same bug as #2225; **#2225 was chosen** (fork PR #59). Don't port #2206 on top.
+  - Upstream PR **#2206** ("Fix native tab window replacement") — moot since the 2026-11 resync:
+    upstream `main`'s native-tabs implementation replaced the fork's #2225 port (fork PR #59).
   - Feature PRs, deferred as not requested (fork bar is bug fixes + small safe features):
     **#2207** (`list-windows --sort-by`), **#2217** (`list-windows --layout` filter), **#2229**
     (`list-tree` command — same family as the already-deferred #2176/#2158 `get_tree`), **#2240**
@@ -212,6 +222,8 @@ focus, #35), `3e381925` (env-var docs, #36), `cfd4eab2` (menu-bar focus steal, #
   - Still-draft: **#2192** (Goodies: add Cyclist), **#2201** (Restore focus after transient dialogs
     close) — revisit when they leave draft.
 - Reviewed 2026-11-09 (`c548c7f8..0921fb81` plus open PRs up to #2385), not ported:
+  - **Everything in this `main` range is merged by the 2026-11 full resync** (the bullets below record
+    why each was skipped at the time). For the per-area resolution see CHANGELOG-FORK.md.
   - **`main` refactors (full-resync milestone):** the native-tabs work-in-progress chain (1/n..22/n,
     `45b2c5d9`..`f5630de7`), the monitor-TreeNode chain (`8ba2e4c1`..`c419f4b2`, which includes
     `58238ba5`), the swift-testing migration (`74fe6426`/`cd5b6f50`), `StrictContinuation`, the
@@ -219,8 +231,10 @@ focus, #35), `3e381925` (env-var docs, #36), `cfd4eab2` (menu-bar focus steal, #
     and the toolchain/CI/release-validation/xcodegen/swiftformat bumps.
   - **Fixes for bugs the fork doesn't have:** `f337d700` and `a5fee800` (both fix bugs introduced
     by the refactors above), `80092f30` (already covered by #2211, fork #57).
-  - **Conflicts with fork design:** `be3e58df`, `b686e0f2` and PR **#2368** (getWindowLevel async
-    latch and `.optionAll`; the fork's window-level cache is synchronous and uses
+  - **Conflicts with fork design:** `be3e58df`, `b686e0f2` (merged by the resync: upstream's async
+    `getWindowLevel` + `.optionAll`, with the latch bug fixed and the fork's once-per-session cache
+    guard on top) and PR **#2368** (getWindowLevel async
+    latch and `.optionAll`; the fork's window-level cache was synchronous and used
     `.optionOnScreenOnly` on purpose), `9fce49a3` (pure refactor), `2436c969` (cosmetic).
   - **Duplicates or superseded:** **#2272** (superseded by #2316), **#2317** (superseded by #2326),
     **#2281**/**#2324**/**#2342** (same guard as #2228, fork #58), **#2341**/**#2353** (#506
@@ -231,7 +245,7 @@ focus, #35), `3e381925` (env-var docs, #36), `cfd4eab2` (menu-bar focus steal, #
     #2293, #2306, #2307, #2319, #2333, #2334, #2336, #2337, #2340, #2352, #2354, #2356, #2360,
     #2379, #2380, #2381, #2383. Docs/CI/infra: #2286, #2287, #2294, #2304, #2331, #2345, #2364.
     Drafts: #2278, #2280, #2378. Focus-follows-mouse-only: #2238, #2245.
-- Upstream CI / build-docs / test-infra commits (`e82b4644`/`78e6dd80`/`ebef281e` GH Actions,
+- (Merged by the 2026-11 resync where they still exist upstream.) Upstream CI / build-docs / test-infra commits (`e82b4644`/`78e6dd80`/`ebef281e` GH Actions,
   `2f4d5039`, `c28d3469`, `d07cfee4`, `6ec50638`, `e47d5989`, `abd944d7`, `e063e2fe`) — upstream-only
   tooling or docs for skipped features; nothing to port.
 
@@ -240,8 +254,8 @@ focus, #35), `3e381925` (env-var docs, #36), `cfd4eab2` (menu-bar focus steal, #
 ### 1. Find what's new (cheap; no code changes)
 ```bash
 git fetch upstream --quiet
-# New commits on upstream main since our base (already-ported shas are listed above — ignore them):
-git log --oneline 63e0976b..upstream/main
+# New commits on upstream main since the last merged upstream commit (see "Sync state"):
+git log --oneline 0921fb81..upstream/main
 # New OPEN upstream PRs (compare numbers against "Already backported" + "Not ported" lists above):
 gh pr list --repo nikitabobko/AeroSpace --state open --limit 100 \
   --json number,title,createdAt,isDraft --jq 'sort_by(.createdAt)[] | "\(.number)\t\(.createdAt[0:10])\t\(.title)"'
@@ -249,7 +263,21 @@ gh pr list --repo nikitabobko/AeroSpace --state open --limit 100 \
 Classify the delta as bug-fix / safe-small-feature / large-feature / docs / obsolete. Default scope
 is **bug fixes + safe small features**; confirm scope with the user before porting features.
 
-### 2. Port each item on its own branch off `origin/main`
+### 2a. Merge upstream `main` (one `resync/<date>` branch, one PR)
+```bash
+git checkout -B resync/<date> origin/main
+git merge --no-ff upstream/main      # resolve conflicts, then commit the merge
+```
+- **Policy:** upstream wins on structure (names, APIs, file layout, swift-testing); every fork
+  behaviour survives on top, re-expressed on upstream's APIs. If upstream's own design fixes the same
+  user-visible bug as a fork patch, take upstream's and record the drop in CHANGELOG-FORK.md.
+  User-visible naming stays fork (`AeroSpace-edge`, `aerospace-edge`, `vitorebatista.aerospace-edge`).
+- Then build, test, lint and `./script/generate.sh` (step 4) until green, commit fixes in logical
+  chunks, update "Sync state" and CHANGELOG-FORK.md, and open one PR.
+- Upstream doc hunks still land in `docs/*.adoc` upstream; the fork's docs are `docs-md/` (see the
+  path map in `.claude/skills/fork-sync/SKILL.md`). Port those by hand and delete the `.adoc` files.
+
+### 2b. Port each unmerged upstream PR on its own branch off `origin/main`
 ```bash
 git checkout -B port/<slug> origin/main
 ```
@@ -259,13 +287,14 @@ git checkout -B port/<slug> origin/main
   gh api repos/nikitabobko/AeroSpace/pulls/<N> -H "Accept: application/vnd.github.v3.diff" > /tmp/<N>.diff
   git apply --3way /tmp/<N>.diff      # on conflict: git apply --reject, then re-implement by hand
   ```
-- **From an upstream `main` commit:** `git cherry-pick <sha>` (works because `upstream` is fetched).
+- **From an upstream `main` commit:** normally merged via step 2a. A single urgent commit can still be
+  `git cherry-pick <sha>`ed; the next `git merge upstream/main` then sees it as already applied.
 
 ### 3. Adapt to fork conventions (these differ from upstream)
 - **`-strict-memory-safety` is on** → some reads need an explicit `unsafe` marker (e.g.
   `return unsafe _value`) that upstream omits. Add it when the compiler demands.
 - **Command results** use `.succ` / `.fail(io.err("..."))` / `BinaryExitCode`, not bare `Bool`.
-- **`terminationHandler`** is non-optional in the fork; there is no `Task.startUnstructured`.
+- **`Task {`** is rejected by `lint.sh`; use `Task.startUnstructured` (upstream's helper, now in the fork).
 - **Window-classification tests are data-driven**: add an `axDumps/*.json5` fixture with the
   expected result inline (e.g. `"Aero.AxUiElementWindowType": "popup"`) rather than a synthetic mock.
 - **Generated files** (`cmdHelpGenerated.swift`, `subcommandDescriptionsGenerated.swift`) come from
@@ -281,9 +310,10 @@ git checkout -B port/<slug> origin/main
 ./script/build-debug.sh -Xswiftc -warnings-as-errors    # must exit 0 (warnings are errors)
 ./script/swift-test.sh                                   # rely on exit 0 + "✅ Swift tests have passed"
 ```
-The "Test run with 0 tests in 0 suites passed" line is normal (Swift Testing framework); XCTest pass
-lines are filtered by the script. IDE/SourceKit diagnostics often lag and show false errors after a
-merge — trust the `-warnings-as-errors` build, not the diagnostics.
+The suite is swift-testing; the summary reads "Test run with N tests in M suites passed". The scripts
+need bash 5 and swiftly (see AGENTS.md); `./script/lint.sh` (swiftformat + swiftlint + periphery) and
+`./script/generate.sh` (xcodegen; the tree must stay clean) are part of the bar too. IDE/SourceKit
+diagnostics often lag and show false errors after a merge — trust the `-warnings-as-errors` build.
 
 ### 5. Open one PR per fix
 ```bash
@@ -313,15 +343,12 @@ git merge --no-ff --no-edit origin/port/<slug> -m "Merge pull request #<forkN> f
 ## Building a release binary (what actually works in this environment)
 
 `./script/build-release.sh` **fails here** on optional packaging extras (not the app): `script/build-docs.sh`
-needs Ruby-under-`mise` on PATH, `script/build-shell-completion.sh` needs `fish` + `bash >= 5` — none are
-installed. Two workarounds:
+needs `mkdocs`/`pandoc`, `script/build-shell-completion.sh` needs `fish` + `bash >= 5`. Two workarounds:
 
-**A. Make the official script work** (if you want man pages + completions): `brew install fish bash`,
-and add a `mise` shim so the docs step's rubygems plugin finds it:
+**A. Make the official script work** (if you want man pages + completions): `brew install fish bash pandoc`
+plus mkdocs, then:
 ```bash
-printf "exec '/opt/homebrew/bin/mise' \"\$@\"\n" > .deps/bin/mise && chmod +x .deps/bin/mise
-NUKE_PATH=1 PATH="$PWD/.deps/bin:/opt/homebrew/bin:/bin:/usr/bin" \
-  ./script/build-release.sh --build-version "1.N" --codesign-identity aerospace-codesign-certificate
+./script/build-release.sh --build-version "1.N" --codesign-identity aerospace-codesign-certificate
 ```
 
 **B. Lean build (recommended — app + CLI, no man pages/completions).** Put the steps in a script and
@@ -329,16 +356,16 @@ run it with `zsh script.sh`, because the interactive shell hook rewrites `rm`/`l
 `rm -rf` into GNU-flagged `rm` that fails on macOS); running inside a script file bypasses the rewrite.
 The script (see git history of `/tmp/lean-release2.sh` pattern) does, with
 `NUKE_PATH=1 PATH="$PWD/.deps/bin:/opt/homebrew/bin:/bin:/usr/bin"`:
-1. `./script/generate.sh --ignore-shell-parser --ignore-cmd-help --build-version "1.N" --codesign-identity aerospace-codesign-certificate --generate-git-hash`
-2. `swift build -c release --arch arm64 --arch x86_64 --product aerospace-edge -Xswiftc -warnings-as-errors`
-3. `xcrun xcodebuild clean build -scheme AeroSpace -destination "generic/platform=macOS" -configuration Release -derivedDataPath .xcode-build`
-4. `git checkout .` (restores generated files + `project.pbxproj` that xcodegen/version-stamping dirtied)
-   > ⚠️ **`git checkout .` discards ALL uncommitted tracked changes, not just the generated ones.**
-   > Commit your work *before* running a release build. (Bit us on 1.10: the source half of the
-   > rename was wiped and only the docs got committed.)
+1. `./script/generate.sh` (xcodegen; the tree must stay clean — no version stamping any more)
+2. `printf '%s\n%s\n%s\n' "1.N" "$(git rev-parse HEAD)" "$(git rev-parse --short HEAD)" > .build-info.txt`
+   (the version and git hash live in a `__TEXT,__aero_build` Mach-O section, read by
+   `Sources/Common/buildInfo.swift`; nothing tracked is rewritten, so no `git checkout .` step)
+3. `swift build -c release --arch arm64 --arch x86_64 --product aerospace-edge -Xswiftc -warnings-as-errors -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __aero_build -Xlinker "$PWD/.build-info.txt"`
+4. `cd xcode && xcrun xcodebuild clean build -scheme AeroSpace -destination "generic/platform=macOS" -configuration Release -derivedDataPath .xcode-build MARKETING_VERSION="1.N" AEROSPACE_CODE_SIGN_IDENTITY=aerospace-codesign-certificate AEROSPACE_BUILD_INFO_LDFLAGS="-sectcreate __TEXT __aero_build $PWD/../.build-info.txt" && cd ..`
 5. assemble `.release/AeroSpace-edge-v<ver>/` = `AeroSpace-edge.app` (from
-   `.xcode-build/Build/Products/Release/`) + `bin/aerospace-edge` (`codesign -s aerospace-codesign-certificate --force`) +
-   `legal/`, then `zip -qr`.
+   `xcode/.xcode-build/Build/Products/Release/`) + `bin/aerospace-edge` (strip non-portable rpaths as
+   `build-release.sh` does, then `codesign -s aerospace-codesign-certificate --force`) + `legal/`, then
+   `zip -qr`. Run `./script/validate-release-binaries.sh` on the result.
 - The app is codesigned by xcodebuild with the self-signed `aerospace-codesign-certificate`
   (see below); both binaries come out universal.
 - **Verify** baked-in version WITHOUT running the CLI (it can hang in non-interactive shells):
@@ -417,11 +444,12 @@ the fork. `close-third-party-issues.yml` is upstream-only tooling — safe to di
 **The runner matrix has diverged from upstream — don't let a sync put `macos-14` back.** GitHub began
 deprecating that image on 2026-07-06, fails jobs on it during brownouts through October, and retires
 it on 2026-11-02 ([runner-images#13518](https://github.com/actions/runner-images/issues/13518)).
-`build-debug` runs on `macos-15` and `macos-26`; `.github/gh-actions-runner-xcode-select.sh` no
-longer branches on the OS, because macos-14 was the only runner that could not take Xcode 26.
+Since the 2026-11 resync the matrix is upstream's `[macos-15, macos-26, xcode-27]`;
+`.github/gh-actions-runner-xcode-select.sh` selects Xcode 26 on `macos-15`/`macos-26` and keeps the
+image's default Xcode on `xcode-27`.
 
 Dropping the runner did not drop macOS 14 support: the deployment target is still 13.0
-(`project.yml`, `Package.swift`), and the `#available(macOS 14, *)` guards in `nativeActivation.swift`
+(`xcode/project.yml`, `Package.swift`), and the `#available(macOS 14, *)` guards in `nativeActivation.swift`
 and `MenuBarLabel.swift` are runtime checks for users on 13, not build-time ones. Leave them.
 
 When macOS 27 reaches GA, add `macos-27` and expect `macos-15` to start the same clock — GitHub keeps

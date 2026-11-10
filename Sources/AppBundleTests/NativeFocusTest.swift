@@ -1,10 +1,12 @@
 @testable import AppBundle
 import Common
-import XCTest
+import Testing
 
-final class NativeFocusTest: XCTestCase {
-    func testPreCancelledJobRunsNoActions() {
-        let job = RunLoopJob()
+@MainActor
+@Suite(.serializedGlobally)
+struct NativeFocusTest {
+    @Test func testPreCancelledJobRunsNoActions() {
+        let job = RunLoopJob(.cancellable)
         job.cancel()
         var actions: [String] = []
 
@@ -20,8 +22,8 @@ final class NativeFocusTest: XCTestCase {
         assertEquals(actions, [])
     }
 
-    func testCancellationDuringSetMainSkipsRaiseAndActivate() {
-        let job = RunLoopJob()
+    @Test func testCancellationDuringSetMainSkipsRaiseAndActivate() {
+        let job = RunLoopJob(.cancellable)
         var actions: [String] = []
 
         assertCancellation {
@@ -39,8 +41,8 @@ final class NativeFocusTest: XCTestCase {
         assertEquals(actions, ["setMain"])
     }
 
-    func testCancellationDuringRaiseSkipsActivate() {
-        let job = RunLoopJob()
+    @Test func testCancellationDuringRaiseSkipsActivate() {
+        let job = RunLoopJob(.cancellable)
         var actions: [String] = []
 
         assertCancellation {
@@ -58,8 +60,8 @@ final class NativeFocusTest: XCTestCase {
         assertEquals(actions, ["setMain", "raise"])
     }
 
-    func testUncancelledJobRunsActionsOnceInOrder() throws {
-        let job = RunLoopJob()
+    @Test func testUncancelledJobRunsActionsOnceInOrder() throws {
+        let job = RunLoopJob(.cancellable)
         var actions: [String] = []
 
         try performNativeFocus(
@@ -72,9 +74,9 @@ final class NativeFocusTest: XCTestCase {
         assertEquals(actions, ["setMain", "raise", "activate"])
     }
 
-    func testSupersededJobStopsAndNewJobCompletes() throws {
-        let firstJob = RunLoopJob()
-        let secondJob = RunLoopJob()
+    @Test func testSupersededJobStopsAndNewJobCompletes() throws {
+        let firstJob = RunLoopJob(.cancellable)
+        let secondJob = RunLoopJob(.cancellable)
         var actions: [String] = []
 
         assertCancellation {
@@ -100,17 +102,16 @@ final class NativeFocusTest: XCTestCase {
     }
 
     private func assertCancellation(
-        file: String = #filePath,
-        line: Int = #line,
+        sourceLocation: SourceLocation = #_sourceLocation,
         _ body: () throws -> Void,
     ) {
         do {
             try body()
-            failExpectedActual("CancellationError", "no error thrown", file: file, line: line)
+            failExpectedActual("CancellationError", "no error thrown", sourceLocation: sourceLocation)
         } catch is CancellationError {
             // expected
         } catch {
-            failExpectedActual("CancellationError", error, file: file, line: line)
+            failExpectedActual("CancellationError", error, sourceLocation: sourceLocation)
         }
     }
 }

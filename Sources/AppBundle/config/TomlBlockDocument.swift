@@ -406,11 +406,11 @@ enum TomlValue {
             return "'\(value)'"
         }
         let escaped = value
-            .replacingOccurrences(of: "\\", with: "\\\\")
-            .replacingOccurrences(of: "\"", with: "\\\"")
-            .replacingOccurrences(of: "\n", with: "\\n")
-            .replacingOccurrences(of: "\r", with: "\\r")
-            .replacingOccurrences(of: "\t", with: "\\t")
+            .replacing("\\", with: "\\\\")
+            .replacing("\"", with: "\\\"")
+            .replacing("\n", with: "\\n")
+            .replacing("\r", with: "\\r")
+            .replacing("\t", with: "\\t")
         return "\"\(escaped)\""
     }
 

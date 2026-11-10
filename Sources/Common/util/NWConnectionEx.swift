@@ -4,7 +4,7 @@ import Foundation
 extension NWConnection {
     public func writeAtomic(_ msg: Codable, _ encoder: JSONEncoder = JSONEncoder()) async -> ((), error: NWError?) {
         let payload = Result { try encoder.encode(msg) }.getOrDie()
-        var data = unsafe withUnsafeBytes(of: UInt32(payload.count)) { pointer in unsafe Data.init(pointer) }
+        var data = withUnsafeBytes(of: UInt32(payload.count)) { pointer in unsafe Data.init(pointer) }
         check(data.count == 4)
         data.append(payload)
         return await withCheckedContinuation { cont in
@@ -18,7 +18,7 @@ extension NWConnection {
         let error1 = await withCheckedContinuation { cont in
             let isDone = IsDone()
             stateUpdateHandler = { state in
-                Task {
+                Task.startUnstructured {
                     let error: NWError?
                     switch state {
                         case .cancelled, .preparing, .setup: return
@@ -98,7 +98,7 @@ extension NWConnection {
     }
 
     public func writeUInt32(_ int: UInt32) async -> ((), error: NWError?) {
-        let data = unsafe withUnsafeBytes(of: int) { pointer in unsafe Data.init(pointer) }
+        let data = withUnsafeBytes(of: int) { pointer in unsafe Data.init(pointer) }
         check(data.count == 4)
         return await withCheckedContinuation { cont in
             send(content: data, completion: .contentProcessed { error in cont.resume(returning: ((), error)) })

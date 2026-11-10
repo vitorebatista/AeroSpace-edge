@@ -5,19 +5,19 @@ struct ListWindowsCommand: Command {
     let args: ListWindowsCmdArgs
     /*conforms*/ let shouldResetClosedWindowsCache = false
 
-    func run(_ env: CmdEnv, _ io: CmdIo) async throws -> BinaryExitCode {
-        let focus = focus
+    func run(_ env: CmdEnv, _ io: CmdIo) async -> BinaryExitCode {
+        let focus = globalFocus
         var windows: [Window] = []
 
-        if args.filteringOptions.focused {
+        if args.filteringFlags.focused {
             switch focus.windowOrNil {
                 case let window?: windows = [window]
                 case nil: return .fail(io.err(noWindowIsFocused))
             }
         } else {
-            var workspaces: Set<Workspace> = args.filteringOptions.workspaces.isEmpty
+            var workspaces: Set<Workspace> = args.filteringFlags.workspaces.isEmpty
                 ? Workspace.all.toSet()
-                : args.filteringOptions.workspaces
+                : args.filteringFlags.workspaces
                     .flatMap { filter in
                         switch filter {
                             case .focused: [focus.workspace]
@@ -26,16 +26,16 @@ struct ListWindowsCommand: Command {
                         }
                     }
                     .toSet()
-            if !args.filteringOptions.monitors.isEmpty {
-                let monitors: Set<CGPoint> = args.filteringOptions.monitors.resolveMonitors(io)
+            if !args.filteringFlags.monitors.isEmpty {
+                let monitors: Set<CGPoint> = args.filteringFlags.monitors.resolveMonitors(io)
                 if monitors.isEmpty { return .fail }
-                workspaces = workspaces.filter { monitors.contains($0.workspaceMonitor.rect.topLeftCorner) }
+                workspaces = workspaces.filter { monitors.contains($0.workspaceMonitorInfo.rect.topLeftCorner) }
             }
-            windows = workspaces.flatMap(\.allLeafWindowsRecursive)
-            if let pid = args.filteringOptions.pidFilter {
+            windows = workspaces.flatMap(\.allInhabitedLeafWindowsRecursive)
+            if let pid = args.filteringFlags.pidFilter {
                 windows = windows.filter { $0.app.pid == pid }
             }
-            if let appId = args.filteringOptions.appIdFilter {
+            if let appId = args.filteringFlags.appIdFilter {
                 windows = windows.filter { $0.app.rawAppBundleId == appId }
             }
         }
@@ -45,7 +45,8 @@ struct ListWindowsCommand: Command {
         } else {
             var _list: [WindowWithPrefetchedTitle] = [] // todo cleanup
             for window in windows {
-                _list.append(try await .resolveWindow(window, for: args.format))
+                guard let window = try? await WindowWithPrefetchedTitle.resolveWindow(window, for: args.format, .nonCancellable) else { return .fail(io.err(bugPrompt())) }
+                _list.append(window)
             }
             _list = _list.filter { $0.window.isBound }
             _list = _list.sorted { Self.sortLess($0, $1, by: args.sort) }
@@ -59,7 +60,7 @@ struct ListWindowsCommand: Command {
             } else {
                 return switch list.format(args.format) {
                     case .success(let lines): .succ(io.out(lines))
-                    case .failure(let msg): .fail(io.err(msg))
+                    case .failure(let msg): .fail(io.err(msg.map(\.description).joinErrors()))
                 }
             }
         }

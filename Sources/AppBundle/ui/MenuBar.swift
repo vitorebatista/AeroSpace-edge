@@ -16,38 +16,63 @@ let menuBarPrimaryActions: [MenuBarPrimaryAction] = [.toggleEnabled, .settings, 
 public func menuBar(viewModel: TrayMenuModel, openSettings: @escaping () -> Void) -> some Scene { // todo should it be converted to "SwiftUI struct"?
     MenuBarExtra {
         // No version line here: it lives in Settings → Application → Version, where it's copyable.
-        if let token: RunSessionGuard = .isServerEnabled {
-            // Persistent workspaces first (in config order), then the rest alphabetically.
-            let sorted = sortWorkspacesForMenuBar(viewModel.workspaces, persistentWorkspaces: config.persistentWorkspaces)
-            let (inUse, available) = partitionWorkspacesForMenuBar(sorted)
-
-            Text("Workspaces:")
-            ForEach(inUse, id: \.name) { workspace in
-                workspaceButton(workspace, token: token)
-            }
-            // Empty workspaces go behind a submenu: with 10 configured workspaces and 2 in use, the
-            // other 8 are just distance between the pointer and everything below them.
-            if !available.isEmpty {
-                Menu {
-                    ForEach(available, id: \.name) { workspace in
-                        workspaceButton(workspace, token: token)
+        if viewModel.axPermissionStatus == .granted {
+            if let token: RunSessionGuard = .isServerEnabled, viewModel.lastReloadConfigContainedWarnings {
+                Button {
+                    Task.startUnstructured {
+                        try await runLightSession(.menuBarButton, token) {
+                            let args: ReloadConfigCmdArgs = ReloadConfigCmdArgs(rawArgs: []).with(\.warningsAsErrors, true)
+                            _ = await reloadConfig_nonCancellable(args: args)
+                        }
                     }
                 } label: {
-                    Text("New")
+                    Label("Config contains warnings...", systemImage: "exclamationmark.triangle.fill")
                 }
+                Divider()
             }
-            Divider()
-        }
-        ForEach(menuBarPrimaryActions) { action in
-            primaryMenuButton(action, viewModel: viewModel, openSettings: openSettings)
+            if let token: RunSessionGuard = .isServerEnabled {
+                // Persistent workspaces first (in config order), then the rest alphabetically.
+                let sorted = sortWorkspacesForMenuBar(viewModel.workspaces, persistentWorkspaces: config.persistentWorkspaces)
+                let (inUse, available) = partitionWorkspacesForMenuBar(sorted)
+
+                Text("Workspaces:")
+                ForEach(inUse, id: \.name) { workspace in
+                    workspaceButton(workspace, token: token)
+                }
+                // Empty workspaces go behind a submenu: with 10 configured workspaces and 2 in use, the
+                // other 8 are just distance between the pointer and everything below them.
+                if !available.isEmpty {
+                    Menu {
+                        ForEach(available, id: \.name) { workspace in
+                            workspaceButton(workspace, token: token)
+                        }
+                    } label: {
+                        Text("New")
+                    }
+                }
+                Divider()
+            }
+            ForEach(menuBarPrimaryActions) { action in
+                primaryMenuButton(action, viewModel: viewModel, openSettings: openSettings)
+            }
+        } else {
+            Button("\(aeroSpaceAppName) requires accessibility permission to move windows") {
+                viewModel.axPermissionStatus = .waitingWithPrompt
+            }
+            primaryMenuButton(.quit, viewModel: viewModel, openSettings: openSettings)
         }
     } label: {
-        if viewModel.isEnabled {
-            MenuBarLabel().environmentObject(viewModel)
-        } else {
-            Image(systemName: "pause.circle.fill")
-                .resizable()
-                .aspectRatio(contentMode: .fit)
+        switch (viewModel.axPermissionStatus, viewModel.isEnabled) {
+            case (.granted, true):
+                MenuBarLabel().environmentObject(viewModel)
+            case (.granted, false):
+                Image(systemName: "pause.circle.fill")
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+            case (_, _):
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
         }
     }
 }
@@ -61,9 +86,9 @@ private func primaryMenuButton(
     switch action {
         case .toggleEnabled:
             Button(viewModel.isEnabled ? "Disable" : "Enable") {
-                Task {
-                    try await runLightSession(.menuBarButton, .forceRun) { () throws in
-                        _ = try await EnableCommand(args: EnableCmdArgs(rawArgs: [], targetState: .toggle))
+                Task.startUnstructured {
+                    try await runLightSession(.menuBarButton, .forceRun) {
+                        _ = await EnableCommand(args: EnableCmdArgs(rawArgs: [], targetState: .toggle))
                             .run(.defaultEnv, .emptyStdin)
                     }
                 }
@@ -72,8 +97,10 @@ private func primaryMenuButton(
             settingsWindowButton(openSettings: openSettings)
         case .quit:
             Button("Quit \(aeroSpaceAppName)") {
-                terminationHandler.beforeTermination()
-                terminateApp()
+                Task.startUnstructured {
+                    terminationHandler?.beforeTermination()
+                    terminateApp()
+                }
             }.keyboardShortcut("Q", modifiers: .command)
     }
 }
@@ -81,7 +108,7 @@ private func primaryMenuButton(
 @MainActor @ViewBuilder
 func workspaceButton(_ workspace: WorkspaceViewModel, token: RunSessionGuard) -> some View {
     Button {
-        Task {
+        Task.startUnstructured {
             try await runLightSession(.menuBarButton, token) { _ = Workspace.get(byName: workspace.name).focusWorkspace() }
         }
     } label: {
@@ -151,11 +178,14 @@ func settingsWindowButton(openSettings: @escaping () -> Void) -> some View {
 }
 
 @MainActor @ViewBuilder
-func reloadConfigButton(showShortcutGroup: Bool = false) -> some View {
+func reloadConfigButton(showShortcutGroup: Bool = false, warningsAsErrors: Bool = false) -> some View {
     if let token: RunSessionGuard = .isServerEnabled {
         let button = Button("Reload config") {
-            Task {
-                try await runLightSession(.menuBarButton, token) { _ = try await reloadConfig() }
+            Task.startUnstructured {
+                try await runLightSession(.menuBarButton, token) {
+                    let args: ReloadConfigCmdArgs = ReloadConfigCmdArgs(rawArgs: []).with(\.warningsAsErrors, warningsAsErrors)
+                    _ = await reloadConfig_nonCancellable(args: args)
+                }
             }
         }.keyboardShortcut("R", modifiers: .command)
         switch showShortcutGroup {

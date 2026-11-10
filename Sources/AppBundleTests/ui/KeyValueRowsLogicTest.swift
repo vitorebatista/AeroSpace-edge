@@ -1,6 +1,6 @@
 @testable import AppBundle
 import Common
-import XCTest
+import Testing
 
 /// Covers the pure row-commit logic behind the settings window's key-value list editors
 /// (key mapping, env-var overrides, per-monitor gaps). These functions are the fix for a
@@ -13,22 +13,23 @@ import XCTest
 /// — so exercising them here pins the "incomplete rows are skipped, not deleted" contract
 /// without needing a view.
 @MainActor
-final class KeyValueRowsLogicTest: XCTestCase {
+@Suite(.serializedGlobally)
+struct KeyValueRowsLogicTest {
     // MARK: - dictionaryFromKeyValueRows
 
-    func testEmptyKeyedRowIsSkipped() {
+    @Test func testEmptyKeyedRowIsSkipped() {
         // This is exactly what "Add" produces before the user types a key: the row must
         // not appear in the written dictionary, but the caller keeps it in `rows`.
         let rows = [KeyValueRow(key: "", value: "")]
         assertEquals(dictionaryFromKeyValueRows(rows), [:])
     }
 
-    func testHalfTypedKeyIsKeptOnceNonEmpty() {
+    @Test func testHalfTypedKeyIsKeptOnceNonEmpty() {
         let rows = [KeyValueRow(key: "MY_VAR", value: "")]
         assertEquals(dictionaryFromKeyValueRows(rows), ["MY_VAR": ""])
     }
 
-    func testDuplicateKeysLastRowWins() {
+    @Test func testDuplicateKeysLastRowWins() {
         let rows = [
             KeyValueRow(key: "A", value: "first"),
             KeyValueRow(key: "A", value: "second"),
@@ -36,7 +37,7 @@ final class KeyValueRowsLogicTest: XCTestCase {
         assertEquals(dictionaryFromKeyValueRows(rows), ["A": "second"])
     }
 
-    func testMixOfCompleteAndIncompleteRows() {
+    @Test func testMixOfCompleteAndIncompleteRows() {
         let rows = [
             KeyValueRow(key: "A", value: "1"),
             KeyValueRow(key: "", value: "orphaned value"),
@@ -47,7 +48,7 @@ final class KeyValueRowsLogicTest: XCTestCase {
 
     // MARK: - parsePerMonitorGapRows
 
-    func testUnparseableMonitorRowIsSkippedNotDropped() {
+    @Test func testUnparseableMonitorRowIsSkippedNotDropped() {
         // "0" isn't a valid 1-based sequence number and an unbalanced "[" isn't a valid
         // regex — either must not blow up the whole list, just be absent from what gets
         // written until the user finishes typing something valid.
@@ -59,12 +60,12 @@ final class KeyValueRowsLogicTest: XCTestCase {
         assertEquals(parsePerMonitorGapRows(rows), [PerMonitorValue(description: .main, value: 20)])
     }
 
-    func testUnparseableIntValueIsSkipped() {
+    @Test func testUnparseableIntValueIsSkipped() {
         let rows = [KeyValueRow(key: "main", value: "not a number")]
         assertEquals(parsePerMonitorGapRows(rows), [])
     }
 
-    func testOrderIsPreserved() {
+    @Test func testOrderIsPreserved() {
         // Order matters: `DynamicConfigValue.getValue` uses first-match-wins.
         let rows = [
             KeyValueRow(key: "secondary", value: "5"),
@@ -76,7 +77,7 @@ final class KeyValueRowsLogicTest: XCTestCase {
         ])
     }
 
-    func testDuplicateMonitorDescriptionsAreBothKept() {
+    @Test func testDuplicateMonitorDescriptionsAreBothKept() {
         // Unlike a dictionary, the per-monitor list is not deduplicated by key — the
         // first rule to match a monitor wins, so preserving both rows (not collapsing
         // them) is required for that semantics to be editable at all.
@@ -98,7 +99,7 @@ final class KeyValueRowsLogicTest: XCTestCase {
     /// off hands the rules back as `rememberedRules` instead of dropping them, and on
     /// restores them verbatim when there's something to restore.
 
-    func testTurningOffRemembersRulesAndWritesAConstant() {
+    @Test func testTurningOffRemembersRulesAndWritesAConstant() {
         let current = DynamicConfigValue.perMonitor(
             [PerMonitorValue(description: .main, value: 20), PerMonitorValue(description: .secondary, value: 10)],
             default: 5,
@@ -111,7 +112,7 @@ final class KeyValueRowsLogicTest: XCTestCase {
         ])
     }
 
-    func testTurningBackOnRestoresRememberedRulesInsteadOfASyntheticOne() {
+    @Test func testTurningBackOnRestoresRememberedRulesInsteadOfASyntheticOne() {
         let remembered = [PerMonitorValue(description: .main, value: 20), PerMonitorValue(description: .secondary, value: 10)]
         let result = togglePerMonitorGaps(isPerMonitor: true, current: .constant(5), rememberedRules: remembered)
         assertEquals(result.value, .perMonitor(remembered, default: 5))
@@ -123,14 +124,14 @@ final class KeyValueRowsLogicTest: XCTestCase {
         ))
     }
 
-    func testTurningOnWithNothingRememberedBuildsASingleSyntheticMainRule() {
+    @Test func testTurningOnWithNothingRememberedBuildsASingleSyntheticMainRule() {
         // First-ever enable, or after the state that used to lose everything: falls back
         // to one rule seeded from the current constant, same as the original behavior.
         let result = togglePerMonitorGaps(isPerMonitor: true, current: .constant(7), rememberedRules: [])
         assertEquals(result.value, .perMonitor([PerMonitorValue(description: .main, value: 7)], default: 7))
     }
 
-    func testMismatchedToggleStateIsANoOp() {
+    @Test func testMismatchedToggleStateIsANoOp() {
         // Turning "on" a field that's already per-monitor, or "off" one that's already
         // constant, can't happen from the checkbox itself but must not corrupt state.
         let perMonitor = DynamicConfigValue.perMonitor([PerMonitorValue(description: .main, value: 1)], default: 1)

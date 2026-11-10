@@ -109,7 +109,7 @@ The following variables can be used inside `<output-format>`:
 
 %{monitor-appkit-nsscreen-screens-id}
 
-: 1-based Number. Sequential number of the belonging monitor in `NSScreen.screens`. Useful for integration with other tools that might be using `NSScreen.screens` ordering (like sketchybar).
+: 1-based index of the belonging monitor in `NSScreen.screens` array. Useful for integration with other tools that might be using `NSScreen.screens` ordering (like sketchybar).
 
 %{monitor-name}
 

@@ -1,14 +1,15 @@
 @testable import AppBundle
 import Common
 import Foundation
-import XCTest
+import Testing
 
 @MainActor
-final class PersistedLayoutTest: XCTestCase {
-    override func setUp() async throws { setUpWorkspacesForTests() }
+@Suite(.serializedGlobally)
+struct PersistedLayoutTest {
+    init() { setUpWorkspacesForTests() }
 
     /// The whole point of persisting to disk, so this has to actually round-trip.
-    func testFrozenWorldSurvivesJson() throws {
+    @Test func testFrozenWorldSurvivesJson() throws {
         let ws = Workspace.get(byName: "round-trip")
         TestWindow.new(id: 1, parent: ws.rootTilingContainer)
         TestWindow.new(id: 2, parent: ws.rootTilingContainer)
@@ -16,14 +17,15 @@ final class PersistedLayoutTest: XCTestCase {
 
         let decoded = try JSONDecoder().decode(FrozenWorld.self, from: JSONEncoder().encode(world))
         assertEquals(decoded.windowIds, [1, 2])
-        assertEquals(decoded.workspaces.map(\.name), ["round-trip"])
-        assertEquals(decoded.workspaces.first?.rootTilingNode.children.count, 2)
+        // Upstream's FrozenWorld is per monitor and freezes every workspace of the monitor
+        let decodedWorkspace = decoded.monitors.flatMap(\.workspaces).first { $0.name == "round-trip" }
+        assertEquals(decodedWorkspace?.rootTilingNode.children.count, 2)
     }
 
     /// The two-Brave-windows case: after a restart the windows are live under *new* ids, so the
     /// restore has to place them by the app + title match rather than by id, and they must land on
     /// the separate workspaces they were on — not both on whichever one is active.
-    func testRestorePlacesRematchedWindowsOnTheirOwnWorkspaces() async throws {
+    @Test func testRestorePlacesRematchedWindowsOnTheirOwnWorkspaces() async throws {
         let ws1 = Workspace.get(byName: "one")
         let ws2 = Workspace.get(byName: "two")
         TestWindow.new(id: 1, parent: ws1.rootTilingContainer)
@@ -38,7 +40,7 @@ final class PersistedLayoutTest: XCTestCase {
         let new1 = TestWindow.new(id: 101, parent: scratch.rootTilingContainer)
         let new2 = TestWindow.new(id: 102, parent: scratch.rootTilingContainer)
 
-        let rematched: [UInt32: Window] = [1: new1, 2: new2]
+        let rematched: [OpaqueWindowId: Window] = [1: new1, 2: new2]
         try await applyFrozenWorld(world) { rematched[$0.id] }
 
         assertEquals(new1.nodeWorkspace?.name, "one")
@@ -47,9 +49,8 @@ final class PersistedLayoutTest: XCTestCase {
 
     private func frozen(_ workspaces: Workspace...) -> FrozenWorld {
         FrozenWorld(
-            workspaces: workspaces.map { FrozenWorkspace($0) },
-            monitors: monitors.map(FrozenMonitor.init),
-            windowIds: workspaces.flatMap { collectAllWindowIds(workspace: $0) }.toSet(),
+            monitors: Monitor.all.map(FrozenMonitor.init),
+            windowIds: workspaces.flatMap { collectAllWindowIdsRecursive($0) }.toSet(),
         )
     }
 }

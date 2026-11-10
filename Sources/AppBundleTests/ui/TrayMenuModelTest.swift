@@ -1,16 +1,18 @@
 @testable import AppBundle
 import Combine
 import Common
-import XCTest
+import Testing
 
 @MainActor
-final class TrayMenuModelTest: XCTestCase {
-    override func setUp() async throws { setUpWorkspacesForTests() }
+@Suite(.serializedGlobally)
+final class TrayMenuModelTest {
+    init() { setUpWorkspacesForTests() }
 
     private var publishes = (trayText: 0, workspaces: 0, trayItems: 0)
     private var subscriptions: Set<AnyCancellable> = []
 
-    override func tearDown() async throws { subscriptions = [] }
+    // A class (not a struct) because the sinks capture `self`. Each test gets a fresh instance; `subscriptions`
+    // cancel themselves when it's deallocated, which replaces the XCTest tearDown
 
     /// Counts every `@Published` emission. They fire on each assignment, equal or not
     private func observe() {
@@ -21,7 +23,7 @@ final class TrayMenuModelTest: XCTestCase {
         model.$trayItems.dropFirst().sink { [unowned self] _ in publishes.trayItems += 1 }.store(in: &subscriptions)
     }
 
-    func testUnchangedStateDoesNotPublish() {
+    @Test func testUnchangedStateDoesNotPublish() {
         Workspace.get(byName: "a").rootTilingContainer.apply {
             TestWindow.new(id: 1, parent: $0)
         }
@@ -36,7 +38,7 @@ final class TrayMenuModelTest: XCTestCase {
         assertEquals(publishes.trayItems, 0, additionalMsg: "trayItems")
     }
 
-    func testFocusedWorkspaceChangePublishesNewState() {
+    @Test func testFocusedWorkspaceChangePublishesNewState() {
         assertTrue(Workspace.get(byName: "a").focusWorkspace())
         updateTrayText()
         observe()
@@ -52,7 +54,7 @@ final class TrayMenuModelTest: XCTestCase {
         assertEquals(TrayMenuModel.shared.workspaces.singleOrNil(where: \.isFocused)?.name, "b")
     }
 
-    func testWindowInInvisibleWorkspacePublishesOnlyWorkspaces() {
+    @Test func testWindowInInvisibleWorkspacePublishesOnlyWorkspaces() {
         assertTrue(Workspace.get(byName: "a").focusWorkspace())
         let b = Workspace.get(byName: "b")
         updateTrayText()
@@ -71,7 +73,7 @@ final class TrayMenuModelTest: XCTestCase {
 
     // Fork: the menu also lists workspaces that only the config mentions (workspaceNamesMentionedIn). Those
     // entries are rebuilt on every call too, and must not defeat the comparison
-    func testUnchangedConfigOnlyWorkspacesDoNotPublish() {
+    @Test func testUnchangedConfigOnlyWorkspacesDoNotPublish() {
         config.workspaceToMonitorForceAssignment = ["config-only": [.sequenceNumber(1)]]
         assertTrue(Workspace.get(byName: "a").focusWorkspace())
         updateTrayText()

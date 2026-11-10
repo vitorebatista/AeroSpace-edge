@@ -13,6 +13,7 @@ Set focus to a window.
 ```synopsis
 aerospace-edge focus [-h|--help] [--ignore-floating] [--wrap-around]
                 [--boundaries <boundary>] [--boundaries-action <action>]
+                [--fail-if-fullscreen] [--fail-if-macos-native-fullscreen]
                 (left|down|up|right)
 aerospace-edge focus [-h|--help] [--ignore-floating] [--wrap-around]
                 [--boundaries <boundary>] [--boundaries-action <action>]
@@ -60,6 +61,14 @@ Contrary to i3, `focus` command doesn’t have a separate argument to focus floa
 `--ignore-floating`
 
 : Don’t perceive floating windows as part of the tree. It may be useful for more reliable scripting.
+
+`--fail-if-fullscreen`
+
+: Exit with non-zero code if the current target window is fullscreen by the `fullscreen` command. Only compatible with `(left|down|up|right)`.
+
+`--fail-if-macos-native-fullscreen`
+
+: Exit with non-zero code if the current target window is in macOS native fullscreen. Only compatible with `(left|down|up|right)`.
 
 ## Arguments
 

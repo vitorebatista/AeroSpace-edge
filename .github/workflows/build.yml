@@ -9,16 +9,21 @@ on:
     branches: [ "main" ]
   schedule:
     - cron: '0 0 * * *' # every day at 00:00
+  workflow_dispatch: # Allows running this workflow manually from the Actions tab or via 'gh workflow run'
+
+env:
+  AEROSPACE_VERBOSE_BUILD: 1
 
 jobs:
 
   build-debug:
     strategy:
-      # fail-fast: false # Disable fail-fast in matrix
+      fail-fast: false
       matrix:
         # https://docs.github.com/en/actions/reference/runners/github-hosted-runners#standard-github-hosted-runners-for-public-repositories
         # https://github.com/actions/runner-images/blob/main/images/macos/macos-15-arm64-Readme.md
         # https://github.com/actions/runner-images/blob/main/images/macos/macos-26-arm64-Readme.md
+        # https://github.com/actions/runner-images/blob/main/images/macos/xcode-27-arm64-Readme.md
         #
         # Xcode versions:
         # - https://en.wikipedia.org/wiki/Xcode
@@ -27,15 +32,18 @@ jobs:
         # macos-14 was dropped: GitHub began deprecating that image on 2026-07-06, fails jobs during
         # brownouts through October, and retires it on 2026-11-02.
         # https://github.com/actions/runner-images/issues/13518
-        os: [macos-15, macos-26]
+        os: [macos-15, macos-26, xcode-27]
     name: build-debug
     runs-on: ${{ matrix.os }}
     steps:
       - run: env # Debug
       - uses: actions/checkout@v6
       - run: ./.github/gh-actions-runner-xcode-select.sh
+      - run: brew install bash
+      - run: HOMEBREW_DISABLE_LOAD_FORMULA=1 brew update # Needed for swiftly :(
       - run: brew install swiftly
       - run: swiftly init --skip-install --assume-yes --verbose && swiftly install
+      - run: swiftly run swift --version
       - run: ./script/build-debug.sh
       - run: ./script/test.sh
 
@@ -44,17 +52,20 @@ jobs:
   # 2. The latest Xcode version is not available on old macOS, and old Xcode versions bundle too old Swift version
   build-release:
     strategy:
-      # fail-fast: false # Disable fail-fast in matrix
+      fail-fast: false
       matrix:
-        os: [macos-15, macos-26]
+        os: [macos-15, macos-26, xcode-27]
     name: build-release
     runs-on: ${{ matrix.os }}
     steps:
       - run: env # Debug
       - uses: actions/checkout@v6
       - run: ./.github/gh-actions-runner-xcode-select.sh
-      - run: brew install bash fish xcbeautify swiftly pandoc # pandoc: build-docs.sh builds the man pages
+      - run: brew install bash fish xcbeautify pandoc # pandoc: build-docs.sh builds the man pages
+      - run: HOMEBREW_DISABLE_LOAD_FORMULA=1 brew update # Needed for swiftly :(
+      - run: brew install swiftly
       - run: swiftly init --skip-install --assume-yes --verbose && swiftly install
+      - run: swiftly run swift --version
       - name: 'build-release.sh refuses to build ad-hoc without --allow-adhoc'
         run: |
           # Guards the guard: this must fail, and it fails fast (before any compilation).
@@ -69,6 +80,7 @@ jobs:
           # NOT: an ad-hoc signature makes macOS drop the user's Accessibility and Screen Recording
           # grants on every upgrade (dev-docs/fork-maintenance.md).
           ./script/build-release.sh --codesign-identity - --allow-adhoc
+          brew trust nikitabobko/tap # install-from-sources.sh installs brew-install-path from it
           ./script/install-from-sources.sh --dont-rebuild
       - name: cat ./.release/xcodebuild.log
         if: ${{ always() }}

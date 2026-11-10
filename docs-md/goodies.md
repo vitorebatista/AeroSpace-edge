@@ -60,9 +60,9 @@ defaults write -g NSAutomaticWindowAnimationsEnabled -bool false
 The following commands focus next or previous workspaces on monitors where the mouse is located
 
 ``` bash
-aerospace-edge workspace "$(aerospace-edge list-workspaces --monitor mouse --visible)" && aerospace-edge workspace next
+aerospace-edge eval 'list-workspaces --monitor mouse --visible | workspace --stdin next; workspace next --wrap-around'
 
-aerospace-edge workspace "$(aerospace-edge list-workspaces --monitor mouse --visible)" && aerospace-edge workspace prev
+aerospace-edge eval 'list-workspaces --monitor mouse --visible | workspace --stdin next; workspace prev --wrap-around'
 ```
 
 Use the software of your choice to assign trackpad gestures to the respective commands. Here are a few third party options in alphabetical order:
@@ -151,8 +151,7 @@ on-focus-changed = [
   "exec-and-forget osascript -e 'tell application id \"tracesOf.Uebersicht\" to refresh widget id \"simple-bar-index-jsx\"'",
 ]
 
-## Notify simple-bar about workspace change
-
+# Notify simple-bar about workspace change
 exec-on-workspace-change = [
   '/bin/zsh',
   '-c',
@@ -180,12 +179,8 @@ Opening **a new window** of a program that can support multiple windows (such as
 - Terminal
 
   ``` toml
-  ctrl-g = '''exec-and-forget osascript -e '
-  tell application "Terminal"
-      do script
-      activate
-  end tell'
-  '''
+  ctrl-g = '''exec-and-forget osascript -e \
+  'tell application "Terminal" to tell (do script) to activate' '''
   ```
 
 - Ghostty
@@ -225,43 +220,33 @@ alt-shift-s = 'exec-and-forget screencapture -i -c'
 [Download i3-like-config.toml](config-examples/i3-like-config-example.toml)
 
 ``` toml
-## Reference: https://github.com/i3/i3/blob/next/etc/config
+# Reference: https://github.com/i3/i3/blob/next/etc/config
 
 config-version = 2
 
-## In i3, all workspaces are phantom
-
+# In i3, all workspaces are phantom
 persistent-workspaces = []
 
-## i3 doesn't have "normalizations" feature that why we disable them here.
-
-## But the feature is very helpful.
-
-## Normalizations eliminate all sorts of weird tree configurations that don't make sense.
-
-## Give normalizations a chance and enable them back.
-
+# i3 doesn't have "normalizations" feature that why we disable them here.
+# But the feature is very helpful.
+# Normalizations eliminate all sorts of weird tree configurations that don't make sense.
+# Give normalizations a chance and enable them back.
 enable-normalization-flatten-containers = false
 enable-normalization-opposite-orientation-for-nested-containers = false
 
-## Mouse follows focus when focused monitor changes
-
+# Mouse follows focus when focused monitor changes
 on-focused-monitor-changed = ['move-mouse monitor-lazy-center']
 
 [mode.main.binding]
     # See: https://vitorebatista.github.io/AeroSpace-edge/goodies/#open-a-new-window-with-applescript
-    alt-enter = '''exec-and-forget osascript -e '
-    tell application "Terminal"
-        do script
-        activate
-    end tell'
-    '''
+    alt-enter = '''exec-and-forget osascript -e \
+    'tell application "Terminal" to tell (do script) to activate' '''
 
     # i3 wraps focus by default
-    alt-j =         'focus --boundaries-action wrap-around-the-workspace left'
-    alt-k =         'focus --boundaries-action wrap-around-the-workspace down'
-    alt-l =         'focus --boundaries-action wrap-around-the-workspace up'
-    alt-semicolon = 'focus --boundaries-action wrap-around-the-workspace right'
+    alt-j =         'focus --wrap-around left'
+    alt-k =         'focus --wrap-around down'
+    alt-l =         'focus --wrap-around up'
+    alt-semicolon = 'focus --wrap-around right'
 
     alt-shift-j = 'move left'
     alt-shift-k = 'move down'

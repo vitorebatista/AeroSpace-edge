@@ -20,7 +20,7 @@ enum GlobalObserver {
         }
         let notifName = notification.name.rawValue
         let activatedAppPid = (notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication)?.processIdentifier
-        Task { @MainActor in
+        Task.startUnstructured { @MainActor in
             if !TrayMenuModel.shared.isEnabled { return }
             if notifName == NSWorkspace.didActivateApplicationNotification.rawValue {
                 if let activatedAppPid {
@@ -35,7 +35,7 @@ enum GlobalObserver {
 
     private static func onHideApp(_ notification: Notification) {
         let notifName = notification.name.rawValue
-        Task { @MainActor in
+        Task.startUnstructured { @MainActor in
             guard let token: RunSessionGuard = .isServerEnabled else { return }
             try await runLightSession(.globalObserver(notifName), token) {
                 if config.automaticallyUnhideMacosHiddenApps {
@@ -60,13 +60,13 @@ enum GlobalObserver {
     private static func onScreenSleepWake(_ notification: Notification) {
         let notifName = notification.name.rawValue
         let isSleepNotification = notification.name == NSWorkspace.screensDidSleepNotification
-        Task { @MainActor in
+        Task.startUnstructured { @MainActor in
             if !TrayMenuModel.shared.isEnabled { return }
             screenSleepWakeInProgress = true
             cancelCancellableCompleteRefreshSession()
             screenSleepWakeTask?.cancel()
             if isSleepNotification { return }
-            screenSleepWakeTask = Task { @MainActor in
+            screenSleepWakeTask = Task.startUnstructured { @MainActor in
                 try? await Task.sleep(for: screenSleepWakeSettleDelay)
                 if Task.isCancelled { return }
                 screenSleepWakeInProgress = false
@@ -80,10 +80,10 @@ enum GlobalObserver {
     /// the tree keeps the stale monitor arrangement until some unrelated event triggers a refresh.
     private static func onScreenParamsChanged(_ notification: Notification) {
         let notifName = notification.name.rawValue
-        Task { @MainActor in
+        Task.startUnstructured { @MainActor in
             if !TrayMenuModel.shared.isEnabled { return }
             screenParamsTask?.cancel()
-            screenParamsTask = Task { @MainActor in
+            screenParamsTask = Task.startUnstructured { @MainActor in
                 try? await Task.sleep(for: screenParamsSettleDelay)
                 if Task.isCancelled { return }
                 // A display change while the screens are asleep is settled by the wake handler
@@ -124,25 +124,25 @@ enum GlobalObserver {
         )
 
         NSEvent.addGlobalMonitorForEvents(matching: .leftMouseUp) { _ in
+            guard let token: RunSessionGuard = .isServerEnabled else { return }
             // todo reduce number of refreshSession in the callback
             //  resetManipulatedWithMouseIfPossible might call its own refreshSession
             //  The end of the callback calls refreshSession
-            Task { @MainActor in
+            Task.startUnstructured { @MainActor in
                 // A click can intentionally activate another app, including one
                 // on a different workspace. It supersedes keyboard/CLI workspace
                 // protection and should be reconciled normally.
                 cancelFocusProtectionAfterWorkspaceSwitch()
                 noteUserClick() // marks the upcoming app activation as user-initiated
 
-                guard let token: RunSessionGuard = .isServerEnabled else { return }
                 try await resetManipulatedWithMouseIfPossible()
                 let mouseLocation = mouseLocation
                 let clickedMonitor = mouseLocation.monitorApproximation
                 switch true {
                     // Detect clicks on desktop of different monitors
-                    case clickedMonitor.visibleRect.contains(mouseLocation) && clickedMonitor.activeWorkspace != focus.workspace:
+                    case clickedMonitor.visibleRect.contains(mouseLocation) && clickedMonitor.visibleWorkspace != globalFocus.workspace:
                         _ = try await runLightSession(.globalObserverLeftMouseUp, token) {
-                            clickedMonitor.activeWorkspace.focusWorkspace()
+                            clickedMonitor.visibleWorkspace.focusWorkspace()
                         }
                     // Detect close button clicks for unfocused windows. Yes, kAXUIElementDestroyedNotification is that unreliable
                     //  And trigger new window detection that could be delayed due to mouseDown event

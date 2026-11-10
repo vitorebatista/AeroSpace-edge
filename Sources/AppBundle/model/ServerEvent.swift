@@ -4,7 +4,7 @@ public struct ServerEvent: Codable, Sendable {
     private let _event: ServerEventType
 
     // periphery:ignore - false positive unused warning. The var properties are serialized to JSON
-    private var windowId: UInt32?
+    private var windowId: OpaqueWindowId?
     // periphery:ignore - false positive unused warning. The var properties are serialized to JSON
     private var workspace: String?
     // periphery:ignore - false positive unused warning. The var properties are serialized to JSON
@@ -24,7 +24,7 @@ public struct ServerEvent: Codable, Sendable {
 
     public var eventType: ServerEventType { _event }
 
-    public static func focusChanged(windowId: UInt32?, workspace: String) -> ServerEvent {
+    public static func focusChanged(windowId: OpaqueWindowId?, workspace: String) -> ServerEvent {
         ServerEvent(_event: .focusChanged, windowId: windowId, workspace: workspace)
     }
 
@@ -40,7 +40,7 @@ public struct ServerEvent: Codable, Sendable {
         ServerEvent(_event: .modeChanged, mode: mode)
     }
 
-    public static func windowDetected(windowId: UInt32, workspace: String?, appBundleId: String?, appName: String?) -> ServerEvent {
+    public static func windowDetected(windowId: OpaqueWindowId, workspace: String?, appBundleId: String?, appName: String?) -> ServerEvent {
         ServerEvent(_event: .windowDetected, windowId: windowId, workspace: workspace, appBundleId: appBundleId, appName: appName)
     }
 
@@ -52,11 +52,11 @@ public struct ServerEvent: Codable, Sendable {
         ServerEvent(_event: .workspaceLayoutChanged, workspace: workspace, layout: layout)
     }
 
-    public static func windowMovedToWorkspace(windowId: UInt32, workspace: String, prevWorkspace: String?) -> ServerEvent {
+    public static func windowMovedToWorkspace(windowId: OpaqueWindowId, workspace: String, prevWorkspace: String?) -> ServerEvent {
         ServerEvent(_event: .windowMovedToWorkspace, windowId: windowId, workspace: workspace, prevWorkspace: prevWorkspace)
     }
 
-    public static func windowClosed(windowId: UInt32, workspace: String?) -> ServerEvent {
+    public static func windowClosed(windowId: OpaqueWindowId, workspace: String?) -> ServerEvent {
         ServerEvent(_event: .windowClosed, windowId: windowId, workspace: workspace)
     }
 }

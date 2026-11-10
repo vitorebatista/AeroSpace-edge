@@ -1,10 +1,11 @@
 @testable import AppBundle
 import Common
-import XCTest
+import Testing
 
 @MainActor
-final class ParseEnvVariablesTest: XCTestCase {
-    func testInterpolation() {
+@Suite(.serializedGlobally)
+struct ParseEnvVariablesTest {
+    @Test func testInterpolation() {
         testSucInterpolation("echo ${foo}", ["foo": "bar"], expected: "echo bar")
         testSucInterpolation("echo $foo", expected: "echo $foo")
         testSucInterpolation("echo $$foo", expected: "echo $$foo")
@@ -17,55 +18,55 @@ final class ParseEnvVariablesTest: XCTestCase {
         testFailInterpolation("echo ${foo}")
     }
 
-    func testInherit() {
-        let (config1, errors1) = parseConfig("exec.inherit-env-vars = false")
-        assertEquals(errors1, [])
-        assertEquals(config1.execConfig.envVariables, [:])
+    @Test func testInherit() {
+        let result1 = parseConfig("exec.inherit-env-vars = false")
+        assertEquals(result1.errors, [])
+        assertEquals(result1.config.execConfig.envVariables, [:])
 
-        let (config2, errors2) = parseConfig("exec.inherit-env-vars = true")
-        assertEquals(errors2, [])
-        assertEquals(config2.execConfig.envVariables, testEnv)
+        let result2 = parseConfig("exec.inherit-env-vars = true")
+        assertEquals(result2.errors, [])
+        assertEquals(result2.config.execConfig.envVariables, testEnv)
     }
 
-    func testDefaultPath() {
+    @Test func testDefaultPath() {
         assertEquals(parseConfig("").config.execConfig.envVariables, testEnv + ["PATH": getDefaultExecPath(isIntelMac: isIntelMac, inheritedPath: "AEROSPACE_TEST_PATH")])
         assertEquals(getDefaultExecPath(isIntelMac: false, inheritedPath: "/usr/bin:/bin"), "/opt/homebrew/bin:/opt/homebrew/sbin:/usr/bin:/bin")
         assertEquals(getDefaultExecPath(isIntelMac: true, inheritedPath: "/usr/bin:/bin"), "/usr/local/bin:/usr/local/sbin:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/bin:/bin")
     }
 
-    func testAddVars() {
-        let (config, errors) = parseConfig(
+    @Test func testAddVars() {
+        let result = parseConfig(
             """
             [exec.env-vars]
             FOO = 'BAR'
             """,
         )
-        assertEquals(errors, [])
-        assertEquals(config.execConfig.envVariables, testEnv + ["FOO": "BAR"])
+        assertEquals(result.errors, [])
+        assertEquals(result.config.execConfig.envVariables, testEnv + ["FOO": "BAR"])
     }
 
-    func testCyclicDep() {
-        let (_, errors) = parseConfig(
+    @Test func testCyclicDep() {
+        let errors = parseConfig(
             """
             [exec.env-vars]
             FOO = '${BAR}'
             BAR = '${FOO}'
             """,
-        )
+        ).strErrors
         assertEquals(errors, [
-            "exec.env-vars.BAR: Env variable 'FOO' isn't presented in AeroSpace-edge.app env vars, or not available for interpolation (because it's mutated)",
-            "exec.env-vars.FOO: Env variable 'BAR' isn't presented in AeroSpace-edge.app env vars, or not available for interpolation (because it's mutated)",
+            "[ERROR] exec.env-vars.BAR: Env variable 'FOO' isn't presented in AeroSpace-edge.app env vars, or not available for interpolation (because it's mutated)",
+            "[ERROR] exec.env-vars.FOO: Env variable 'BAR' isn't presented in AeroSpace-edge.app env vars, or not available for interpolation (because it's mutated)",
         ])
     }
 
-    func testForbidPwd() {
-        let (_, errors) = parseConfig(
+    @Test func testForbidPwd() {
+        let errors = parseConfig(
             """
             [exec.env-vars]
             PWD = ''
             """,
-        )
-        assertEquals(errors, ["exec.env-vars.PWD: Changing 'PWD' is not allowed"])
+        ).strErrors
+        assertEquals(errors, ["[ERROR] exec.env-vars.PWD: Changing 'PWD' is not allowed"])
     }
 }
 

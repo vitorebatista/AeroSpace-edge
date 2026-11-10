@@ -1,15 +1,9 @@
 extension Optional {
-    public func orDie(
-        _ message: String = "",
-        file: StaticString = #fileID,
-        line: Int = #line,
-        column: Int = #column,
-        function: String = #function,
-    ) -> Wrapped {
-        self ?? dieT("orDie: " + message, file: file, line: line, column: column, function: function)
+    public func orDie(_ message: String = "", fileId: MyFileId = #myFileId) -> Wrapped {
+        self ?? dieT("orDie: " + message, fileId: fileId)
     }
 
-    public func orFailure<F: Error>(_ or: @autoclosure () -> F) -> Result<Wrapped, F> {
+    public func toResult<F: Error>(_ or: @autoclosure () -> F) -> Result<Wrapped, F> {
         self.map(Result.success) ?? .failure(or())
     }
 

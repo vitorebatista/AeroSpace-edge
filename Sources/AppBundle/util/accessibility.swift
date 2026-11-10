@@ -3,11 +3,21 @@ import Common
 import PrivateApi
 
 @MainActor
-func checkAccessibilityPermissions() {
+func waitForAccessibilityPermission_nonCancellable() async {
     let options = [axTrustedCheckOptionPrompt: true]
-    if !AXIsProcessTrustedWithOptions(options as CFDictionary) {
-        resetAccessibility() // Because macOS doesn't reset it for us when the app signature changes...
-        terminateApp()
+    while true {
+        let status = TrayMenuModel.shared.axPermissionStatus == .waitingWithPrompt
+            ? AXIsProcessTrustedWithOptions(options as CFDictionary)
+            : AXIsProcessTrusted()
+        if status {
+            TrayMenuModel.shared.axPermissionStatus = .granted
+            break
+        }
+        if TrayMenuModel.shared.axPermissionStatus == .waitingWithPrompt {
+            resetAccessibility() // Because macOS doesn't reset it for us when the app signature changes...
+        }
+        TrayMenuModel.shared.axPermissionStatus = .waiting
+        try? await Task.sleep(for: .seconds(1))
     }
 }
 
@@ -176,6 +186,10 @@ enum Ax {
         var setter: @Sendable (T) -> CFTypeRef?
     }
 
+    static let parentWindowRecursive = ReadableAttrImpl<AXUIElement>(
+        key: kAXWindowAttribute,
+        getter: { ($0 as! AXUIElement) },
+    )
     static let titleAttr = WritableAttrImpl<String>(
         key: kAXTitleAttribute,
         getter: { $0 as? String },
@@ -267,7 +281,7 @@ enum Ax {
         key: kAXWindowsAttribute,
         getter: { ($0 as? NSArray)?.map { any in
             let ax = any as! AXUIElement
-            return (ax.containingWindowId(), ax)
+            return (ax.containingNativeWindowId(), ax)
         } ?? [] },
     )
     static let focusedWindowAttr = ReadableAttrImpl<WindowIdAndAxUiElementMock>(
@@ -307,10 +321,10 @@ let kAXAeroSynthetic = "Aero.synthetic"
 private func castToAxUiElementMock(_ a: AnyObject) -> AxUiElementMock {
     if isUnitTest {
         if let str = a as? String, let commaIndex = str.firstIndex(of: ",") {
-            let windowId = UInt32.init(String(str.prefix(upTo: commaIndex)).removePrefix("AXUIElement(AxWindowId="))
+            let windowId = UInt32.init(String(str.prefix(upTo: commaIndex)).removePrefix("AXUIElement(windowId_native="))
             if let windowId {
                 return castToAxUiElementMock([
-                    "Aero.axWindowId": Json.int(windowId),
+                    "Aero.windowId_native": Json.int(windowId),
                     kAXAeroSynthetic: Json.bool(true),
                 ] as AnyObject)
             }
@@ -331,7 +345,7 @@ private func windowOrNil(_ any: Any?) -> WindowIdAndAxUiElementMock? {
     guard let any else { return nil }
     let potentialWindow = castToAxUiElementMock(any as AnyObject)
     // Filter out non-window objects (e.g. Finder's desktop)
-    return switch potentialWindow.containingWindowId() {
+    return switch potentialWindow.containingNativeWindowId() {
         case let windowId?: (windowId, potentialWindow)
         case nil: nil
     }
@@ -376,7 +390,7 @@ extension AXUIElement: AxUiElementMock {
         return AXUIElementSetAttributeValue(self, attr.key as CFString, value) == .success
     }
 
-    func containingWindowId() -> CGWindowID? {
+    func containingNativeWindowId() -> CGWindowID? {
         let state = signposter.beginInterval(#function, "axTaskLocalAppThreadToken: \(axTaskLocalAppThreadToken?.idForDebug)")
         defer { signposter.endInterval(#function, state) }
         var cgWindowId = CGWindowID()
@@ -385,7 +399,7 @@ extension AXUIElement: AxUiElementMock {
             : nil
     }
 
-    /// containingWindowId that distinguishes a destroyed window from an app that didn't respond in time
+    /// containingNativeWindowId that distinguishes a destroyed window from an app that didn't respond in time
     func windowLiveness() -> AxWindowLiveness {
         let state = signposter.beginInterval(#function, "axTaskLocalAppThreadToken: \(axTaskLocalAppThreadToken?.idForDebug)")
         defer { signposter.endInterval(#function, state) }
@@ -395,6 +409,11 @@ extension AXUIElement: AxUiElementMock {
             case .cannotComplete: .unknown // The app event loop is busy, or the messaging timeout expired
             default: .dead
         }
+    }
+
+    var pid: pid_t? {
+        var pid: pid_t = 0
+        return unsafe AXUIElementGetPid(self, &pid) == .success ? pid : nil
     }
 }
 

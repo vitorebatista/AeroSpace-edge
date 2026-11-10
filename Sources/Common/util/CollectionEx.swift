@@ -7,8 +7,6 @@ extension Collection {
         indices.contains(index) ? self[index] : nil
     }
 
-    /// Order-preserving concurrent map. The tasks run on the main actor, so the concurrency comes from suspension:
-    /// e.g. AX requests to different apps (one AX thread per app) overlap instead of queueing behind each other
     @MainActor public func mapConcurrently<R: Sendable>(
         _ transform: @escaping @Sendable @MainActor (Element) async throws -> R,
     ) async throws -> [R] {

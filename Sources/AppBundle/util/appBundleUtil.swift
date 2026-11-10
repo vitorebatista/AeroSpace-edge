@@ -11,8 +11,8 @@ let lockScreenAppBundleId = "com.apple.loginwindow"
 func interceptTermination(_ _signal: Int32) {
     signal(_signal, { (signal: Int32) in
         check(Thread.current.isMainThread)
-        Task { @MainActor in
-            terminationHandler.beforeTermination()
+        Task.startUnstructured { @MainActor in
+            terminationHandler?.beforeTermination()
             exit(signal)
         }
     } as sig_t)
@@ -30,7 +30,7 @@ private struct AppServerTerminationHandler: TerminationHandler {
         for window in MacWindow.allWindowsMap.values {
             // makeAllWindowsVisibleAndRestoreSize may be invoked when something went wrong (e.g. some windows are unbound)
             // that's why it's not allowed to use `.parent` call in here
-            let monitor = window.macApp.getAxRectForTermination(window.windowId)?.center.monitorApproximation ?? mainMonitor
+            let monitor = window.macApp.getAxRectForTermination(window.windowId)?.center.monitorApproximation ?? mainMonitorInfo
             let monitorVisibleRect = monitor.visibleRect
             let windowSize = window.lastFloatingSize ?? CGSize(width: monitorVisibleRect.width, height: monitorVisibleRect.height)
             let point = CGPoint(
@@ -74,7 +74,7 @@ func + (a: CGPoint, b: CGPoint) -> CGPoint {
     CGPoint(x: a.x + b.x, y: a.y + b.y)
 }
 
-extension CGPoint: ConvenienceCopyable {}
+extension CGPoint: Withable {}
 
 extension CGPoint {
     func distance(toOuterFrame rect: Rect) -> CGFloat {
@@ -99,7 +99,11 @@ extension CGPoint {
 
     var vectorLength: CGFloat { sqrt(x * x + y * y) }
 
-    var monitorApproximation: Monitor { monitors.minByOrDie { distance(toOuterFrame: $0.rect) } }
+    // Fork: NSScreen.screens is momentarily empty during display reconfiguration (e.g. lid close with external
+    // displays). Fall back to mainMonitorInfo (which itself falls back to the test monitor) instead of crashing
+    var monitorApproximation: MonitorInfo {
+        globalUnsortedMonitorInfos.min(by: { distance(toOuterFrame: $0.rect) < distance(toOuterFrame: $1.rect) }) ?? mainMonitorInfo
+    }
 }
 
 extension CGFloat {
@@ -130,8 +134,13 @@ extension CGPoint: @retroactive Hashable { // todo migrate to self written Point
 #endif
 
 @inlinable
-func checkCancellation() throws(CancellationError) {
-    if Task.isCancelled {
+func checkCancellation(_ cm: CancellationMode = .cancellable) throws(CancellationError) {
+    if cm == .cancellable && Task.isCancelled {
         throw CancellationError()
     }
+}
+
+public enum CancellationMode: Equatable, Sendable {
+    case cancellable
+    case nonCancellable
 }

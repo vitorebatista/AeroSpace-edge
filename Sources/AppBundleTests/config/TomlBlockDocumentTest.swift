@@ -1,9 +1,11 @@
 @testable import AppBundle
 import Common
-import XCTest
+import Testing
 
-final class TomlBlockDocumentTest: XCTestCase {
-    func testRoundTripDefaultConfig() {
+@MainActor
+@Suite(.serializedGlobally)
+struct TomlBlockDocumentTest {
+    @Test func testRoundTripDefaultConfig() {
         for name in ["default-config.toml", "i3-like-config-example.toml"] {
             let text = try! String(
                 contentsOf: projectRoot.appending(component: "docs/config-examples/\(name)"),
@@ -13,7 +15,7 @@ final class TomlBlockDocumentTest: XCTestCase {
         }
     }
 
-    func testRoundTripTrickyValues() {
+    @Test func testRoundTripTrickyValues() {
         let text = """
             # leading comment
             start-at-login = true
@@ -34,7 +36,7 @@ final class TomlBlockDocumentTest: XCTestCase {
         assertEquals(TomlBlockDocument(text).render(), text)
     }
 
-    func testCommentContainingAMultilineDelimiterDoesNotHideFollowingBlocks() {
+    @Test func testCommentContainingAMultilineDelimiterDoesNotHideFollowingBlocks() {
         // TOML comments may contain any text, including the three-quote sequence that
         // starts a multiline string. The document splitter must stop at the comment
         // marker before considering delimiters, or it treats every following line as a
@@ -47,7 +49,7 @@ final class TomlBlockDocumentTest: XCTestCase {
         )
     }
 
-    func testBlockSplitting() {
+    @Test func testBlockSplitting() {
         let doc = TomlBlockDocument(
             """
             a = 1
@@ -65,7 +67,7 @@ final class TomlBlockDocumentTest: XCTestCase {
         )
     }
 
-    func testTrailingCommentsInATableBecomeTrivia() {
+    @Test func testTrailingCommentsInATableBecomeTrivia() {
         // A comment run at the end of a table body is split out, so that replacing the
         // table does not swallow a comment that visually belongs to what follows.
         let doc = TomlBlockDocument(
@@ -84,18 +86,18 @@ final class TomlBlockDocumentTest: XCTestCase {
         assertEquals(doc.blocks[2], .table(name: "exec", text: "[exec]\ninherit-env-vars = true"))
     }
 
-    func testArrayOfTablesName() {
+    @Test func testArrayOfTablesName() {
         let doc = TomlBlockDocument("[[on-window-detected]]\nrun = ['layout floating']\n")
         assertEquals(doc.blocks.count, 1)
         assertEquals(doc.blocks[0].name, "on-window-detected")
     }
 
-    func testEmptyInput() {
+    @Test func testEmptyInput() {
         assertEquals(TomlBlockDocument("").render(), "")
         assertEquals(TomlBlockDocument("").blocks.count, 0)
     }
 
-    func testSetExistingKeyPreservesEverythingElse() {
+    @Test func testSetExistingKeyPreservesEverythingElse() {
         var doc = TomlBlockDocument(
             """
             # top comment
@@ -120,13 +122,13 @@ final class TomlBlockDocumentTest: XCTestCase {
         )
     }
 
-    func testSetPreservesTrailingCommentOnTheSameLine() {
+    @Test func testSetPreservesTrailingCommentOnTheSameLine() {
         var doc = TomlBlockDocument("accordion-padding = 30 # why 30\n")
         doc.set(key: "accordion-padding", tomlValue: "45")
         assertEquals(doc.render(), "accordion-padding = 45 # why 30\n")
     }
 
-    func testSetAbsentKeyIsInsertedBeforeTheFirstTableHeader() {
+    @Test func testSetAbsentKeyIsInsertedBeforeTheFirstTableHeader() {
         var doc = TomlBlockDocument(
             """
             start-at-login = true
@@ -148,19 +150,19 @@ final class TomlBlockDocumentTest: XCTestCase {
         )
     }
 
-    func testSetAbsentKeyInAFileWithNoTables() {
+    @Test func testSetAbsentKeyInAFileWithNoTables() {
         var doc = TomlBlockDocument("start-at-login = true\n")
         doc.set(key: "accordion-padding", tomlValue: "45")
         assertEquals(doc.render(), "start-at-login = true\naccordion-padding = 45\n")
     }
 
-    func testSetAbsentKeyInAnEmptyDocument() {
+    @Test func testSetAbsentKeyInAnEmptyDocument() {
         var doc = TomlBlockDocument("")
         doc.set(key: "start-at-login", tomlValue: "true")
         assertEquals(doc.render(), "start-at-login = true\n")
     }
 
-    func testSetMultiLineValueIsReplacedWholesale() {
+    @Test func testSetMultiLineValueIsReplacedWholesale() {
         var doc = TomlBlockDocument(
             """
             persistent-workspaces = [
@@ -180,7 +182,7 @@ final class TomlBlockDocumentTest: XCTestCase {
         )
     }
 
-    func testRemoveKey() {
+    @Test func testRemoveKey() {
         var doc = TomlBlockDocument("a = 1\nb = 2\n")
         doc.remove(key: "a")
         assertEquals(doc.render(), "b = 2\n")
@@ -188,7 +190,7 @@ final class TomlBlockDocumentTest: XCTestCase {
         assertEquals(doc.render(), "b = 2\n")
     }
 
-    func testUnknownKeysAndTablesSurviveASet() {
+    @Test func testUnknownKeysAndTablesSurviveASet() {
         let text = """
             some-future-option = 'hello'
             start-at-login = false
@@ -198,10 +200,10 @@ final class TomlBlockDocumentTest: XCTestCase {
             """
         var doc = TomlBlockDocument(text)
         doc.set(key: "start-at-login", tomlValue: "true")
-        assertEquals(doc.render(), text.replacingOccurrences(of: "start-at-login = false", with: "start-at-login = true"))
+        assertEquals(doc.render(), text.replacing("start-at-login = false", with: "start-at-login = true"))
     }
 
-    func testValueSerialisers() {
+    @Test func testValueSerialisers() {
         assertEquals(TomlValue.of(true), "true")
         assertEquals(TomlValue.of(42), "42")
         assertEquals(TomlValue.of("plain"), "'plain'")
@@ -211,7 +213,7 @@ final class TomlBlockDocumentTest: XCTestCase {
         assertEquals(TomlValue.array([]), "[]")
     }
 
-    func testValueSerialiserEscapesControlCharactersInsteadOfEmittingARawLiteral() {
+    @Test func testValueSerialiserEscapesControlCharactersInsteadOfEmittingARawLiteral() {
         // A raw newline inside a single-quoted literal string is invalid TOML (literal
         // strings are single-line) — this must fall back to an escaped basic string.
         assertEquals(TomlValue.of("line1\nline2"), "\"line1\\nline2\"")
@@ -238,7 +240,7 @@ final class TomlBlockDocumentTest: XCTestCase {
 
         """
 
-    func testTextForTablesMatching() {
+    @Test func testTextForTablesMatching() {
         let doc = TomlBlockDocument(Self.tablesFixture)
         assertEquals(
             doc.text(forTablesMatching: { $0.hasPrefix("mode.") }),
@@ -254,22 +256,22 @@ final class TomlBlockDocumentTest: XCTestCase {
         assertEquals(doc.text(forTablesMatching: { $0 == "nope" }), "")
     }
 
-    func testReplaceTableKeepsPosition() {
+    @Test func testReplaceTableKeepsPosition() {
         var doc = TomlBlockDocument(Self.tablesFixture)
         doc.replaceTable(named: "gaps", with: "[gaps]\ninner.vertical = 9\n")
         assertEquals(
             doc.render(),
-            Self.tablesFixture.replacingOccurrences(of: "inner.vertical = 2", with: "inner.vertical = 9"),
+            Self.tablesFixture.replacing("inner.vertical = 2", with: "inner.vertical = 9"),
         )
     }
 
-    func testReplaceTableWithNilDeletesIt() {
+    @Test func testReplaceTableWithNilDeletesIt() {
         var doc = TomlBlockDocument("a = 1\n\n[gaps]\ninner.vertical = 2\n\n[exec]\nx = 1\n")
         doc.replaceTable(named: "gaps", with: nil)
         assertEquals(doc.render(), "a = 1\n\n[exec]\nx = 1\n")
     }
 
-    func testReplaceTableWithNilKeepsARealCommentThatFollowsIt() {
+    @Test func testReplaceTableWithNilKeepsARealCommentThatFollowsIt() {
         // The dangling-trivia cleanup after a delete must only ever remove a *blank*
         // trivia block. A trivia block carrying a real comment (not blank-only) is left
         // in place untouched, so the comment isn't silently swallowed.
@@ -278,7 +280,7 @@ final class TomlBlockDocumentTest: XCTestCase {
         assertEquals(doc.render(), "a = 1\n\n# still relevant\n[exec]\nx = 1\n")
     }
 
-    func testReplaceTableAlsoDropsTopLevelDottedKeys() {
+    @Test func testReplaceTableAlsoDropsTopLevelDottedKeys() {
         // `gaps.inner.vertical = 5` at top level is the same setting spelled differently;
         // regenerating `[gaps]` must not leave a duplicate definition behind.
         var doc = TomlBlockDocument("gaps.inner.vertical = 5\nstart-at-login = true\n")
@@ -286,13 +288,13 @@ final class TomlBlockDocumentTest: XCTestCase {
         assertEquals(doc.render(), "start-at-login = true\n[gaps]\ninner.vertical = 9\n")
     }
 
-    func testReplaceAbsentTableAppends() {
+    @Test func testReplaceAbsentTableAppends() {
         var doc = TomlBlockDocument("a = 1\n")
         doc.replaceTable(named: "gaps", with: "[gaps]\ninner.vertical = 9\n")
         assertEquals(doc.render(), "a = 1\n[gaps]\ninner.vertical = 9\n")
     }
 
-    func testReplaceTablesMatchingSplicesAtFirstMatch() {
+    @Test func testReplaceTablesMatchingSplicesAtFirstMatch() {
         var doc = TomlBlockDocument(Self.tablesFixture)
         doc.replaceTables(matching: { $0.hasPrefix("mode.") }, with: "[mode.main.binding]\nalt-j = 'focus down'\n")
         assertEquals(
@@ -313,13 +315,13 @@ final class TomlBlockDocumentTest: XCTestCase {
         )
     }
 
-    func testReplaceTablesMatchingWhenNoneMatchAppends() {
+    @Test func testReplaceTablesMatchingWhenNoneMatchAppends() {
         var doc = TomlBlockDocument("a = 1\n")
         doc.replaceTables(matching: { $0.hasPrefix("mode.") }, with: "[mode.main.binding]\nalt-j = 'focus down'\n")
         assertEquals(doc.render(), "a = 1\n[mode.main.binding]\nalt-j = 'focus down'\n")
     }
 
-    func testCrlfDocumentSplitsIntoLines() {
+    @Test func testCrlfDocumentSplitsIntoLines() {
         // Swift treats "\r\n" as a SINGLE Character, so `char == "\n"` never fires on a CRLF
         // document: without an explicit CRLF case in `linesWithTerminators()` the whole file
         // came back as one block, and `set` then dropped everything after the first key as
@@ -334,7 +336,7 @@ final class TomlBlockDocumentTest: XCTestCase {
         assertEquals(doc.blocks[2], .table(name: "gaps", text: "[gaps]\r\ninner.vertical = 2\r\n"))
     }
 
-    func testSetKeepsTheLineEndingTheFileAlreadyUsed() {
+    @Test func testSetKeepsTheLineEndingTheFileAlreadyUsed() {
         // A rewritten key keeps its own CRLF rather than becoming the one LF line in the
         // middle of the user's file — and the keys after it are still there.
         var crlf = TomlBlockDocument("a = 1\r\nb = 2\r\n")
@@ -352,7 +354,7 @@ final class TomlBlockDocumentTest: XCTestCase {
         assertEquals(unterminated.render(), "a = 9")
     }
 
-    func testSetAbsentKeyInACrlfDocumentDoesNotGlueLines() {
+    @Test func testSetAbsentKeyInACrlfDocumentDoesNotGlueLines() {
         // Pinning a known limitation, not an aspiration: a key that is *rewritten* keeps the
         // file's own terminator, but a brand-new line (here, and in a regenerated table body)
         // is still emitted with LF. That leaves one mixed ending in a CRLF file — cosmetic,
@@ -363,7 +365,7 @@ final class TomlBlockDocumentTest: XCTestCase {
         assertEquals(doc.render(), "a = 1\r\nb = 2\n[gaps]\r\ninner.vertical = 2\r\n")
     }
 
-    func testReplaceTablesMatchingLeavesAnUnmatchedTableInBetweenUntouched() {
+    @Test func testReplaceTablesMatchingLeavesAnUnmatchedTableInBetweenUntouched() {
         // Two matching tables separated by a *non-matching* table (not just trivia):
         // the span to splice must stop at each match, not swallow the unmatched table
         // (and its comment) sitting between them.

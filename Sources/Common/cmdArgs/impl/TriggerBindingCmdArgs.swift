@@ -3,12 +3,14 @@ public struct TriggerBindingCmdArgs: CmdArgs {
     public init(rawArgs: StrArrSlice) { self.commonState = .init(rawArgs) }
     public static let parser: CmdParser<Self> = .init(
         kind: .triggerBinding,
-        allowInConfig: true,
         help: trigger_binding_help_generated,
         flags: [
             "--mode": singleValueSubArgParser(\._mode, "<mode-id>", Result.success),
         ],
-        posArgs: [newMandatoryPosArgParser(\.binding, consumeStrCliArg, placeholder: "<binding>")],
+        posArgs: [
+            doubleDashArg(mandatory: false),
+            newMandatoryPosArgParser(\.binding, consumeStrCliArg, placeholder: "<binding>"),
+        ],
     )
     public typealias ExitCodeType = Int32ExitCode
 

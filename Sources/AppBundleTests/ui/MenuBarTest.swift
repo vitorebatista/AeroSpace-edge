@@ -1,14 +1,15 @@
 @testable import AppBundle
-import XCTest
+import Testing
 
 @MainActor
-final class MenuBarTest: XCTestCase {
-    func testPrimaryMenuContainsOnlyEnableSettingsAndQuit() {
+@Suite(.serializedGlobally)
+struct MenuBarTest {
+    @Test func testPrimaryMenuContainsOnlyEnableSettingsAndQuit() {
         assertEquals(menuBarPrimaryActions, [.toggleEnabled, .settings, .quit])
     }
 
-    func testApplicationToolsHaveASettingsSidebarDestination() {
-        XCTAssertTrue(SettingsCategory.allCases.contains(.application))
+    @Test func testApplicationToolsHaveASettingsSidebarDestination() {
+        #expect(SettingsCategory.allCases.contains(.application))
     }
 
     private func ws(
@@ -29,7 +30,7 @@ final class MenuBarTest: XCTestCase {
 
     private func names(_ workspaces: [WorkspaceViewModel]) -> [String] { workspaces.map(\.name) }
 
-    func testMixed_persistentFirstInConfigOrderThenRestAlphabetical() {
+    @Test func testMixed_persistentFirstInConfigOrderThenRestAlphabetical() {
         // Input order is intentionally shuffled to prove the comparator (not input order) drives output.
         let input = [ws("delta"), ws("2"), ws("alpha"), ws("1"), ws("charlie")]
         let result = sortWorkspacesForMenuBar(input, persistentWorkspaces: ["2", "1"])
@@ -37,19 +38,19 @@ final class MenuBarTest: XCTestCase {
         assertEquals(names(result), ["2", "1", "alpha", "charlie", "delta"])
     }
 
-    func testAllPersistent_keepConfigOrder() {
+    @Test func testAllPersistent_keepConfigOrder() {
         let input = [ws("a"), ws("b"), ws("c")]
         let result = sortWorkspacesForMenuBar(input, persistentWorkspaces: ["c", "a", "b"])
         assertEquals(names(result), ["c", "a", "b"])
     }
 
-    func testNonePersistent_alphabetical() {
+    @Test func testNonePersistent_alphabetical() {
         let input = [ws("charlie"), ws("alpha"), ws("bravo")]
         let result = sortWorkspacesForMenuBar(input, persistentWorkspaces: [])
         assertEquals(names(result), ["alpha", "bravo", "charlie"])
     }
 
-    func testPersistentNameNotPresentInWorkspaces_isIgnored() {
+    @Test func testPersistentNameNotPresentInWorkspaces_isIgnored() {
         // A persistent name with no matching workspace doesn't appear and doesn't disturb ordering.
         let input = [ws("b"), ws("a")]
         let result = sortWorkspacesForMenuBar(input, persistentWorkspaces: ["z", "a"])
@@ -57,14 +58,14 @@ final class MenuBarTest: XCTestCase {
         assertEquals(names(result), ["a", "b"])
     }
 
-    func testEmptyInput() {
+    @Test func testEmptyInput() {
         let result = sortWorkspacesForMenuBar([], persistentWorkspaces: ["1", "2"])
         assertEquals(names(result), [])
     }
 
     // MARK: - In-use / available split
 
-    func testWorkspacesWithWindowsAreInUse() {
+    @Test func testWorkspacesWithWindowsAreInUse() {
         let (inUse, available) = partitionWorkspacesForMenuBar([
             ws("1", isEffectivelyEmpty: false),
             ws("2"),
@@ -76,7 +77,7 @@ final class MenuBarTest: XCTestCase {
 
     /// A workspace you're looking at stays at the top level even with nothing on it — otherwise it would
     /// vanish into the submenu the moment its last window closed.
-    func testVisibleOrFocusedEmptyWorkspaceStaysInUse() {
+    @Test func testVisibleOrFocusedEmptyWorkspaceStaysInUse() {
         let (inUse, available) = partitionWorkspacesForMenuBar([
             ws("1", isVisible: true),
             ws("2", isFocused: true),
@@ -86,14 +87,14 @@ final class MenuBarTest: XCTestCase {
         assertEquals(names(available), ["3"])
     }
 
-    func testAllEmptyAndUnusedMeansEverythingIsAvailable() {
+    @Test func testAllEmptyAndUnusedMeansEverythingIsAvailable() {
         let (inUse, available) = partitionWorkspacesForMenuBar([ws("1"), ws("2")])
         assertEquals(names(inUse), [])
         assertEquals(names(available), ["1", "2"])
     }
 
     /// The caller sorts before partitioning, so the split must not reshuffle either group.
-    func testRelativeOrderIsPreservedWithinEachGroup() {
+    @Test func testRelativeOrderIsPreservedWithinEachGroup() {
         let (inUse, available) = partitionWorkspacesForMenuBar([
             ws("b", isEffectivelyEmpty: false),
             ws("z"),
@@ -104,7 +105,7 @@ final class MenuBarTest: XCTestCase {
         assertEquals(names(available), ["z", "c"])
     }
 
-    func testEmptyInputIsHandled() {
+    @Test func testEmptyInputIsHandled() {
         let (inUse, available) = partitionWorkspacesForMenuBar([])
         assertEquals(names(inUse), [])
         assertEquals(names(available), [])

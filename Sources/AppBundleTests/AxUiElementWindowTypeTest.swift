@@ -1,42 +1,13 @@
 @testable import AppBundle
+import AppKit
 import Common
-import XCTest
+import Testing
 
-final class AxWindowKindTest: XCTestCase {
-    func test() throws {
+@MainActor
+@Suite(.serializedGlobally)
+struct AxWindowKindTest {
+    @Test func test() throws {
         try checkAxDumpsRecursive(projectRoot.appending(path: "./axDumps"))
-    }
-
-    func testEmacsFloatingChildFrameIsPopup() {
-        let window = syntheticWindow(
-            windowId: 11964,
-            subrole: kAXFloatingWindowSubrole,
-            title: "CodexChildFrame",
-        )
-        let app = syntheticApp(focusedWindowId: 11963)
-
-        XCTAssertEqual(
-            window.getWindowType(axApp: app, .emacs, .regular, .normalWindow),
-            .popup,
-        )
-        XCTAssertEqual(window.isDialogHeuristic(.emacs, .normalWindow), false)
-    }
-
-    func testEmacsStandardWindowRemainsWindow() {
-        let window = syntheticWindow(
-            windowId: 11963,
-            subrole: kAXStandardWindowSubrole,
-            title: "Emacs  —  (182 × 58)",
-            isFocused: true,
-            isMain: true,
-        )
-        let app = syntheticApp(focusedWindowId: 11963)
-
-        XCTAssertEqual(
-            window.getWindowType(axApp: app, .emacs, .regular, .normalWindow),
-            .window,
-        )
-        XCTAssertEqual(window.isDialogHeuristic(.emacs, .normalWindow), false)
     }
 }
 
@@ -67,36 +38,6 @@ func checkAxDumpsRecursive(_ dir: URL) throws {
     }
 }
 
-private func syntheticWindow(
-    windowId: UInt32,
-    subrole: String,
-    title: String,
-    isFocused: Bool = false,
-    isMain: Bool = false,
-) -> [String: Json] {
-    [
-        kAXAeroSynthetic: .bool(true),
-        "Aero.axWindowId": .int(windowId),
-        kAXSubroleAttribute: .string(subrole),
-        kAXTitleAttribute: .string(title),
-        kAXFocusedAttribute: .bool(isFocused),
-        kAXMainAttribute: .bool(isMain),
-        kAXCloseButtonAttribute: .null,
-        kAXFullScreenButtonAttribute: .null,
-        kAXZoomButtonAttribute: .null,
-        kAXMinimizeButtonAttribute: .null,
-    ]
-}
-
-private func syntheticApp(focusedWindowId: UInt32) -> [String: Json] {
-    [
-        kAXAeroSynthetic: .bool(true),
-        kAXFocusedWindowAttribute: .string(
-            "AXUIElement(AxWindowId=\(focusedWindowId), title=\"Emacs\", role=\"AXWindow\", subrole=\"AXStandardWindow\")",
-        ),
-    ]
-}
-
 extension [String: Json]: AxUiElementMock {
     public func get<Attr>(_ attr: Attr) -> Attr.T? where Attr: ReadableAttr {
         guard let value = self[attr.key] else {
@@ -112,10 +53,10 @@ extension [String: Json]: AxUiElementMock {
 
     private var isSynthetic: Bool { self[kAXAeroSynthetic] != nil }
 
-    public func containingWindowId() -> CGWindowID? { _containingWindowId() }
+    public func containingNativeWindowId() -> CGWindowID? { _containingNativeWindowId() }
 
-    private func _containingWindowId() -> CGWindowID {
-        let windowId = self["Aero.axWindowId"]?.asInt64OrNil ?? dieT()
+    private func _containingNativeWindowId() -> CGWindowID {
+        let windowId = self["Aero.windowId_native"]?.asInt64OrNil ?? dieT()
         return UInt32.init(exactly: windowId).orDie()
     }
 }

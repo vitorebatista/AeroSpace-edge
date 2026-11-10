@@ -1,30 +1,32 @@
 @testable import AppBundle
 import Common
 import Foundation
-import XCTest
+import Testing
 
-final class UpdateCheckTest: XCTestCase {
+@MainActor
+@Suite(.serializedGlobally)
+struct UpdateCheckTest {
     // MARK: - Version ordering
 
     /// The bug a string comparison would introduce: "1.9" > "1.10" lexicographically, so every 1.10+ user
     /// would be told to "update" back to 1.9, forever.
-    func testDoubleDigitMinorSortsAfterSingleDigit() {
+    @Test func testDoubleDigitMinorSortsAfterSingleDigit() {
         assertTrue(AppVersion("1.9")! < AppVersion("1.10")!)
         assertEquals(AppVersion("1.10")! < AppVersion("1.9")!, false)
     }
 
-    func testMissingComponentsAreZero() {
+    @Test func testMissingComponentsAreZero() {
         assertEquals(AppVersion("1.11")! < AppVersion("1.11.0")!, false)
         assertEquals(AppVersion("1.11.0")! < AppVersion("1.11")!, false)
         assertTrue(AppVersion("1.11")! < AppVersion("1.11.1")!)
     }
 
-    func testLeadingVIsAccepted() {
+    @Test func testLeadingVIsAccepted() {
         assertEquals(AppVersion("v1.11")!.description, "1.11")
     }
 
     /// Debug builds report 0.0.0-SNAPSHOT. Rather than guessing, the checker declines to compare.
-    func testUnparsableVersionsAreRejected() {
+    @Test func testUnparsableVersionsAreRejected() {
         assertNil(AppVersion("0.0.0-SNAPSHOT"))
         assertNil(AppVersion("0.20.3-Beta-fork.9"))
         assertNil(AppVersion(""))
@@ -37,7 +39,7 @@ final class UpdateCheckTest: XCTestCase {
 
     /// Every AeroSpace-edge release is a prerelease, so prereleases must be eligible — treating them the
     /// way GitHub's /releases/latest does would mean never finding an update at all.
-    func testPrereleasesAreEligible() {
+    @Test func testPrereleasesAreEligible() {
         let json = releasesJson("""
             [{"tag_name":"v1.11","draft":false,"prerelease":true,"body":"notes",
               "assets":[{"name":"AeroSpace-edge-v1.11.zip","browser_download_url":"https://github.com/vitorebatista/AeroSpace-edge/releases/download/v1.11/AeroSpace-edge-v1.11.zip"}]}]
@@ -47,7 +49,7 @@ final class UpdateCheckTest: XCTestCase {
         assertEquals(release?.version.description, "1.11")
     }
 
-    func testPicksHighestVersionNotFirstListed() {
+    @Test func testPicksHighestVersionNotFirstListed() {
         let json = releasesJson("""
             [{"tag_name":"v1.9","draft":false,"body":"","assets":[{"name":"a.zip","browser_download_url":"https://github.com/x/y/releases/download/v1.9/a.zip"}]},
              {"tag_name":"v1.11","draft":false,"body":"","assets":[{"name":"b.zip","browser_download_url":"https://github.com/x/y/releases/download/v1.11/b.zip"}]},
@@ -56,7 +58,7 @@ final class UpdateCheckTest: XCTestCase {
         assertEquals(newestRelease(inReleasesJson: json)?.version.description, "1.11")
     }
 
-    func testDraftsAreIgnored() {
+    @Test func testDraftsAreIgnored() {
         let json = releasesJson("""
             [{"tag_name":"v1.12","draft":true,"body":"","assets":[{"name":"a.zip","browser_download_url":"https://github.com/x/y/releases/download/v1.12/a.zip"}]},
              {"tag_name":"v1.11","draft":false,"body":"","assets":[{"name":"b.zip","browser_download_url":"https://github.com/x/y/releases/download/v1.11/b.zip"}]}]
@@ -65,7 +67,7 @@ final class UpdateCheckTest: XCTestCase {
     }
 
     /// A release with no installable asset (notes-only, or assets still uploading) must not be offered.
-    func testReleaseWithoutZipIsSkipped() {
+    @Test func testReleaseWithoutZipIsSkipped() {
         let json = releasesJson("""
             [{"tag_name":"v1.12","draft":false,"body":"","assets":[]},
              {"tag_name":"v1.11","draft":false,"body":"","assets":[{"name":"b.zip","browser_download_url":"https://github.com/x/y/releases/download/v1.11/b.zip"}]}]
@@ -75,14 +77,14 @@ final class UpdateCheckTest: XCTestCase {
 
     /// The app replaces its own bundle with this download, so an asset URL pointing off GitHub is dropped
     /// rather than followed.
-    func testAssetOnForeignHostIsRejected() {
+    @Test func testAssetOnForeignHostIsRejected() {
         let json = releasesJson("""
             [{"tag_name":"v1.12","draft":false,"body":"","assets":[{"name":"evil.zip","browser_download_url":"https://evil.example.com/evil.zip"}]}]
             """)
         assertNil(newestRelease(inReleasesJson: json))
     }
 
-    func testMalformedJsonIsHandled() {
+    @Test func testMalformedJsonIsHandled() {
         assertNil(newestRelease(inReleasesJson: releasesJson("not json")))
         assertNil(newestRelease(inReleasesJson: releasesJson("{}")))
         assertNil(newestRelease(inReleasesJson: releasesJson("[]")))
@@ -90,7 +92,7 @@ final class UpdateCheckTest: XCTestCase {
 
     // MARK: - Download allowlist
 
-    func testUpdateUrlAllowlist() {
+    @Test func testUpdateUrlAllowlist() {
         assertTrue(isAllowedUpdateUrl(URL(string: "https://github.com/vitorebatista/AeroSpace-edge/releases/download/v1.11/a.zip")!))
         assertTrue(isAllowedUpdateUrl(URL(string: "https://objects.githubusercontent.com/foo")!))
         assertEquals(isAllowedUpdateUrl(URL(string: "http://github.com/a.zip")!), false) // plain http

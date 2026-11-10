@@ -18,6 +18,9 @@ struct FrozenContainer: Sendable, Codable {
                 case .window(let w): .window(FrozenWindow(w))
                 case .tilingContainer(let c): .container(FrozenContainer(c))
                 case .workspace,
+                     .monitor,
+                     .workspacesContainer,
+                     .floatingWindowsContainer,
                      .macosMinimizedWindowsContainer,
                      .macosHiddenAppsWindowsContainer,
                      .macosFullscreenWindowsContainer,
@@ -32,7 +35,7 @@ struct FrozenContainer: Sendable, Codable {
 }
 
 struct FrozenWindow: Sendable, Codable {
-    let id: UInt32
+    let id: OpaqueWindowId
     let weight: CGFloat
 
     @MainActor init(_ window: Window) {

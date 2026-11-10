@@ -6,49 +6,45 @@ import Foundation
     // Synchronously, before the scene builds: the status item reads its stored position the moment
     // `MenuBarExtra` creates it, and nothing can move it afterwards.
     applyMenuBarItemPosition()
-    Task {
+    Task.startUnstructured {
         initTerminationHandler()
         unsafe _isCli = false
+        unsafe _isUnitTest = false
         initServerArgs()
         // Must be read here: everything below focuses workspaces and overwrites the same key.
         let focusedWorkspaceAtLaunch = storedFocusedWorkspace()
+        // Before the accessibility prompt: if another AeroSpace owns the windows, that's the thing the
+        // user needs to hear about, not a permissions dialog.
+        await checkNoConflictingAeroSpaceIsRunning()
+        await waitForAccessibilityPermission_nonCancellable()
         if isDebug {
             await toggleReleaseServerIfDebug(.off)
             interceptTermination(SIGINT)
             interceptTermination(SIGKILL)
         }
+
         do {
             let state = signposter.beginInterval("startup.config")
             defer { signposter.endInterval("startup.config", state) }
-            if try await !reloadConfig() {
-                var out = ""
-                check(
-                    try await reloadConfig(forceConfigUrl: defaultConfigUrl, stdout: &out),
-                    """
-                    Can't load default config. Your installation is probably corrupted.
-                    Please don't modify \(defaultConfigUrl.description.singleQuoted)
-
-                    \(out)
-                    """,
-                )
-            }
+            await bootstrapConfig_nonCancellable()
+            _ = await reloadConfig_nonCancellable()
         }
 
-        // Before the accessibility prompt: if another AeroSpace owns the windows, that's the thing the
-        // user needs to hear about, not a permissions dialog.
-        await checkNoConflictingAeroSpaceIsRunning()
-        checkAccessibilityPermissions()
         startUnixSocketServer()
         GlobalObserver.initObserver()
         Workspace.garbageCollectUnusedWorkspaces() // init workspaces
-        _ = Workspace.all.first?.focusWorkspace()
+        for monitor in Monitor.all {
+            _ = monitor.getWorkspacesContainerOrCreate().children.filterIsInstance(of: Workspace.self)
+                .min()?
+                .focusWorkspace()
+        }
         // No signpost around this call, nor around the light session below: both
         // runHeavyCompleteRefreshSession and runLightSession already emit one keyed on #function.
         await runHeavyCompleteRefreshSession(
             .startup,
             // It's important for the first initialization to be non cancellable
-            // to make sure that isStartup propagates // to all places
-            cancellable: false,
+            // to make sure that isStartup propagates to all places
+            assumeCancellable: false,
             layoutWorkspaces: false,
         )
         // After the refresh session above: the live windows exist by now, so they can be put back
@@ -60,14 +56,25 @@ import Foundation
         }
         try await runLightSession(.startup, .forceRun) {
             smartLayoutAtStartup()
-            _ = try await config.afterStartupCommand.runCmdSeq(.defaultEnv, .emptyStdin)
+            _ = await config.afterStartupCommand.run(.defaultEnv, .emptyStdin)
         }
     }
 }
 
+@MainActor private func bootstrapConfig_nonCancellable() async {
+    let result = await reloadConfig_nonCancellable(forceConfigUrl: defaultConfigUrl)
+    let msg = """
+        Can't load default config. Your installation is probably corrupted.
+        Please don't modify \(defaultConfigUrl.description.singleQuoted)
+
+        \(result.stdout)
+        """
+    check(result.isOk, msg)
+}
+
 @MainActor
 private func smartLayoutAtStartup() {
-    let workspace = focus.workspace
+    let workspace = globalFocus.workspace
     let root = workspace.rootTilingContainer
     switch root.children.count <= 3 {
         case true: root.layout = .tiles
@@ -75,9 +82,7 @@ private func smartLayoutAtStartup() {
     }
 }
 
-@TaskLocal
-var _isStartup: Bool? = false
-var isStartup: Bool { _isStartup ?? dieT("isStartup is not initialized") }
+var isStartup: Bool { refreshSessionEvent?.isStartup == true }
 
 struct ServerArgs: Sendable {
     var configLocation: String? = nil

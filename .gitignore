@@ -1,23 +1,15 @@
-/.idea
-/.debug
-/.release
-/.shell-completion
-/.site
-/.man
-/Gemfile.lock
-# IDK, AppCode randomly creates this EMPTY file. I have no idea what this is
-/default.profraw
-.DS_Store
-/.xcode-build
-# Swift package manager
-/.build
-/.swiftpm
-/.vscode
-# External dependencies
-/.deps
+# Ignore .files/.dirs in the root by default.
+# New root .files must be explicitly added with `git add -f`
+# New root .directories must be explicitly listed below
+/.*
 
-# For whatever local files that developers might want to keep there (I personally keep a separate `generated-html` git worktree here)
-/.local
+# Unignored top level .dirs
+!/.bundle
+!/.claude
+!/.github
+
+/Gemfile.lock
+/xcode/.xcode-build
 
 # XCode User settings
 xcuserdata/
@@ -26,8 +18,5 @@ xcshareddata/
 # Claude Code agent worktrees (transient). Skills under .claude/skills/ are tracked.
 /.claude/worktrees
 
-# Local Codex worktrees are transient and must never be committed.
-/.worktrees
-
-# Local trace bundles and machine-specific benchmark results.
-/.benchmarks
+# Local Codex worktrees (/.worktrees) and trace bundles / benchmark results (/.benchmarks)
+# are covered by the root `/.*` rule above and must never be committed.

@@ -1,6 +1,13 @@
-public typealias Parsed<T> = Result<T, String>
-extension String: @retroactive Error {} // Make it possible to use String in Result. todo migrate to self written Result monad
-extension Array: @retroactive Error where Element: Error {} // Make it possible to use [String] in Result. todo migrate to self written Result monad
+import Foundation
+
+public typealias ResOrStr<T> = Result<T, String>
+extension String: @retroactive LocalizedError { // Make it possible to use String in Result. todo migrate to self written Result monad
+    public var errorDescription: String? { self }
+}
+
+// Make it possible to use [String] in Result. todo migrate to self written Result monad
+extension Array: @retroactive Error where Element: Error {}
+extension Array: @retroactive LocalizedError where Element: LocalizedError {}
 
 extension String {
     public func trim() -> String {
@@ -11,7 +18,6 @@ extension String {
         split(separator: "\n", omittingEmptySubsequences: false).map { with + $0 }.joined(separator: "\n")
     }
 
-    public func quoted(with char: String) -> String { char + self + char }
     public var singleQuoted: String { "'" + self + "'" }
     public var doubleQuoted: String { "\"" + self + "\"" }
 }
@@ -19,7 +25,7 @@ extension String {
 extension [String] {
     public func joinErrors() -> String { // todo reuse in config parsing?
         map { (error: String) -> String in
-            error.split(separator: "\n").enumerated()
+            error.split(separator: "\n").enumerated().lazy
                 .map { (i, line) in
                     i == 0
                         ? "ERROR: " + line
@@ -56,7 +62,7 @@ extension [String] {
 
 extension [[String]] {
     public func toPaddingTable(columnSeparator: String = " | ") -> [String] {
-        let pads: [Int] = transposed().map { column in column.map { $0.count }.max().orDie() }
+        let pads: [Int] = transposed().map { column in column.lazy.map { $0.count }.max().orDie() }
         return self.map { (row: [String]) in
             zip(row.enumerated(), pads)
                 .map { (elem: (Int, String), pad: Int) in
@@ -70,14 +76,14 @@ extension [[String]] {
 
 extension String {
     public func interpolate(with variables: [String: String]) -> Result<String, [String]> {
-        interpolationTokens(interpolationChar: "$")
+        rawInterpolationTokens(interpolationChar: "$")
             .mapError { [$0] }
             .flatMap { tokens in
                 tokens.mapAllOrFailures { token in
                     switch token {
                         case .literal(let literal): .success(literal)
                         case .interVar(let value):
-                            variables[value].orFailure("Env variable '\(value)' isn't presented in AeroSpace-edge.app env vars, "
+                            variables[value].toResult("Env variable '\(value)' isn't presented in AeroSpace-edge.app env vars, "
                                 + "or not available for interpolation (because it's mutated)")
                     }
                 }
@@ -85,9 +91,30 @@ extension String {
             .map { $0.joined(separator: "") }
     }
 
-    public func interpolationTokens(interpolationChar: Character) -> Result<[StringInterToken], String> {
+    public func interpolationTokens<T>(
+        interpolationChar: Character,
+        ofInterVarType type: T.Type,
+    ) -> Result<[InterToken<T>], String> where T: Sendable, T: Equatable, T: CaseIterable, T: RawRepresentable, T.RawValue == String {
+        rawInterpolationTokens(interpolationChar: interpolationChar).flatMap { rawTokens in
+            var result: [InterToken<T>] = []
+            for token in rawTokens {
+                switch token {
+                    case .literal(let literal):
+                        result.append(.literal(literal))
+                    case .interVar(let value):
+                        switch parseEnum(value, type) {
+                            case .success(let interVar): result.append(.interVar(interVar))
+                            case .failure(let err): return .failure(err)
+                        }
+                }
+            }
+            return .success(result)
+        }
+    }
+
+    func rawInterpolationTokens(interpolationChar: Character) -> Result<[RawStringInterToken], String> {
         var mode: InterpolationParserState = .stringLiteral(currLiteral: "")
-        var result: [StringInterToken] = []
+        var result: [RawStringInterToken] = []
         for char: Character? in (Array(self) + [nil]) {
             switch (mode, char) { // State machine
                 case (.stringLiteral(let literal), interpolationChar):
@@ -122,10 +149,12 @@ extension String {
     }
 }
 
-public enum StringInterToken: Equatable, Sendable {
+public enum InterToken<T>: Equatable, Sendable where T: Equatable, T: Sendable {
     case literal(String)
-    case interVar(String) // "interpolation variable"
+    case interVar(T) // "interpolation variable"
 }
+
+typealias RawStringInterToken = InterToken<String>
 
 private enum InterpolationParserState {
     case stringLiteral(currLiteral: String)

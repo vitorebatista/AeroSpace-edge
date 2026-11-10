@@ -1,9 +1,10 @@
 @testable import AppBundle
 import Common
-import XCTest
+import Testing
 
 @MainActor
-final class ConfigTomlWriterTest: XCTestCase {
+@Suite(.serializedGlobally)
+struct ConfigTomlWriterTest {
     /// Applies a draft to an empty document, re-parses the result with the real parser,
     /// and returns the parsed config. Fails the test if the output does not parse.
     ///
@@ -20,12 +21,12 @@ final class ConfigTomlWriterTest: XCTestCase {
         var document = TomlBlockDocument("")
         ConfigTomlWriter.apply(draft, original: original, to: &document)
         let text = document.render()
-        let (parsed, errors) = parseConfig(text)
+        let (parsed, errors) = parseConfigTuple(text)
         assertEquals(errors, [], additionalMsg: "generated config did not parse:\n\(text)")
         return parsed
     }
 
-    func testScalarsRoundTrip() {
+    @Test func testScalarsRoundTrip() {
         let parsed = roundTrip { draft in
             draft.startAtLogin = true
             draft.autoReloadConfig = true
@@ -51,10 +52,10 @@ final class ConfigTomlWriterTest: XCTestCase {
         assertEquals(parsed.accordionPadding, 45)
         assertEquals(parsed.focusFollowsAppActivation, .smart)
         assertEquals(parsed.newWindowPreventFlicker, true)
-        assertEquals(parsed.configVersion, 2)
+        assertEquals(parsed.configVersion, ._2)
     }
 
-    func testWindowBorderRoundTrips() {
+    @Test func testWindowBorderRoundTrips() {
         let parsed = roundTrip { draft in
             draft.focusedWindowBorder = true
             draft.focusedWindowBorderColor = "0xff123456"
@@ -71,7 +72,7 @@ final class ConfigTomlWriterTest: XCTestCase {
         assertEquals(parsed.focusedWindowBorderInset, 2)
     }
 
-    func testPersistentWorkspacesRoundTrips() {
+    @Test func testPersistentWorkspacesRoundTrips() {
         // `config-version = 2` is not incidental: the key is rejected outright below that,
         // so this is the only combination a user can actually save.
         let parsed = roundTrip { draft in
@@ -81,7 +82,7 @@ final class ConfigTomlWriterTest: XCTestCase {
         assertEquals(Array(parsed.persistentWorkspaces), ["1", "web", "it's"])
     }
 
-    func testPersistentWorkspacesIsGatedOnConfigVersion() {
+    @Test func testPersistentWorkspacesIsGatedOnConfigVersion() {
         // Negative branch: a genuine config-version <= 1 file — the realistic case, where
         // the key is simply absent and config-version defaults to 1 — with a workspace
         // binding, so the parser itself derives a non-empty `persistentWorkspaces`
@@ -91,9 +92,9 @@ final class ConfigTomlWriterTest: XCTestCase {
         // key outright ("This config option is only available since 'config-version = 2'").
         let text = "[mode.main.binding]\nalt-1 = 'workspace 1'\n"
         var document = TomlBlockDocument(text)
-        let (config, errors) = parseConfig(text)
+        let (config, errors) = parseConfigTuple(text)
         assertEquals(errors, [])
-        assertEquals(config.configVersion, 1)
+        assertEquals(config.configVersion, ._1)
         assertEquals(Array(config.persistentWorkspaces), ["1"])
 
         let original = ConfigTomlWriter.draft(from: config, rawExec: RawExecConfig(), document: document)
@@ -103,7 +104,7 @@ final class ConfigTomlWriterTest: XCTestCase {
 
         let rendered = document.render()
         assertEquals(rendered.contains("persistent-workspaces"), false, additionalMsg: rendered)
-        let (_, reErrors) = parseConfig(rendered)
+        let (_, reErrors) = parseConfigTuple(rendered)
         assertEquals(reErrors, [], additionalMsg: rendered)
 
         // The gate's other half: a v1 file that already spells out `persistent-workspaces`
@@ -118,7 +119,7 @@ final class ConfigTomlWriterTest: XCTestCase {
         assertEquals(alreadyPresentDocument.render(), "persistent-workspaces = ['1', '2']\n")
     }
 
-    func testConstantGapsRoundTrip() {
+    @Test func testConstantGapsRoundTrip() {
         let parsed = roundTrip { draft in
             draft.gaps = Gaps(inner: .init(vertical: 5, horizontal: 6), outer: .init(left: 1, bottom: 2, top: 3, right: 4))
         }
@@ -126,7 +127,7 @@ final class ConfigTomlWriterTest: XCTestCase {
         assertEquals(parsed.gaps.outer.top, .constant(3))
     }
 
-    func testPerMonitorGapsRoundTrip() {
+    @Test func testPerMonitorGapsRoundTrip() {
         let pattern = MonitorDescription.pattern("Dell.*")!
         let parsed = roundTrip { draft in
             draft.gaps = Gaps(
@@ -144,7 +145,7 @@ final class ConfigTomlWriterTest: XCTestCase {
         assertEquals(parsed.gaps.outer.right, .perMonitor([PerMonitorValue(description: pattern, value: 12)], default: 4))
     }
 
-    func testKeyMappingRoundTrips() {
+    @Test func testKeyMappingRoundTrips() {
         let parsed = roundTrip { draft in
             draft.keyMappingPreset = .dvorak
             draft.keyNotationToKeyCode = ["q": "quote"]
@@ -156,7 +157,7 @@ final class ConfigTomlWriterTest: XCTestCase {
         assertEquals(parsed.keyMapping.resolve()["s"], getKeysPreset(.dvorak)["s"])
     }
 
-    func testExecRoundTrips() {
+    @Test func testExecRoundTrips() {
         let parsed = roundTrip { draft in
             draft.inheritEnvVars = false
             draft.envVars = ["MY_VAR": "hello"]
@@ -165,7 +166,7 @@ final class ConfigTomlWriterTest: XCTestCase {
         assertEquals(parsed.execConfig.envVariables["AEROSPACE_INHERITED_TEST_ENV"], nil)
     }
 
-    func testWorkspaceToMonitorAssignmentRoundTrips() {
+    @Test func testWorkspaceToMonitorAssignmentRoundTrips() {
         let pattern = MonitorDescription.pattern("Dell.*")!
         let parsed = roundTrip { draft in
             draft.workspaceToMonitorForceAssignment = [
@@ -179,7 +180,7 @@ final class ConfigTomlWriterTest: XCTestCase {
         assertEquals(parsed.workspaceToMonitorForceAssignment["3"], [pattern])
     }
 
-    func testRawPanesAreSpliced() {
+    @Test func testRawPanesAreSpliced() {
         let parsed = roundTrip { draft in
             draft.rawKeybindings = "[mode.main.binding]\nalt-h = 'focus left'\n"
             draft.rawWindowRules = "[[on-window-detected]]\nif.app-id = 'com.apple.finder'\nrun = ['layout floating']\n"
@@ -187,10 +188,10 @@ final class ConfigTomlWriterTest: XCTestCase {
         }
         assertEquals(parsed.modes[mainModeId]?.bindings.isEmpty, false)
         assertEquals(parsed.onWindowDetected.count, 1)
-        assertEquals(parsed.onFocusChanged.count, 1)
+        assertEquals(parsed.onFocusChanged.flatten().count, 1)
     }
 
-    func testDefaultsAreNotWrittenWhenAbsentFromTheFile() {
+    @Test func testDefaultsAreNotWrittenWhenAbsentFromTheFile() {
         // A user's file that sets nothing must stay minimal after an unrelated edit.
         //
         // Deviation from the brief, reconfirmed after the round-1 review (see the fix
@@ -216,7 +217,7 @@ final class ConfigTomlWriterTest: XCTestCase {
         assertEquals(document.render(), "start-at-login = true\n")
     }
 
-    func testRevertingAnOptionToItsDefaultStillPersistsWhenAlreadyPresent() {
+    @Test func testRevertingAnOptionToItsDefaultStillPersistsWhenAlreadyPresent() {
         // The `isDefault && already present` branch of `setOrOmit`: turning a toggle back
         // to its default value must still overwrite the existing line, not leave the old
         // value or silently drop the key.
@@ -230,7 +231,7 @@ final class ConfigTomlWriterTest: XCTestCase {
         // Built from the config parsed out of THIS document, the way `SettingsModel.load()`
         // does: the writer only touches a key whose value differs from the one it loaded,
         // so an `original` that disagreed with the document would skip the branch entirely.
-        let (config, errors) = parseConfig(text)
+        let (config, errors) = parseConfigTuple(text)
         assertEquals(errors, [])
         let original = ConfigTomlWriter.draft(from: config, rawExec: RawExecConfig(), document: document)
         var draft = original
@@ -239,7 +240,7 @@ final class ConfigTomlWriterTest: XCTestCase {
         assertEquals(document.render(), "start-at-login = false\n")
     }
 
-    func testRegeneratingATableRemovesItsExistingSubTables() {
+    @Test func testRegeneratingATableRemovesItsExistingSubTables() {
         // `[exec]` and `[exec.env-vars]` are separate top-level blocks (each `[header]`
         // line splits into its own block). Regenerating `[exec]` must remove the stale
         // `[exec.env-vars]` too, or the freshly-generated `[exec]` body (which re-emits
@@ -252,13 +253,13 @@ final class ConfigTomlWriterTest: XCTestCase {
         ConfigTomlWriter.apply(draft, original: original, to: &document)
         let text = document.render()
         assertEquals(text.components(separatedBy: "[exec.env-vars]").count - 1, 1, additionalMsg: text)
-        let (parsed, errors) = parseConfig(text)
+        let (parsed, errors) = parseConfigTuple(text)
         assertEquals(errors, [], additionalMsg: text)
         assertEquals(parsed.execConfig.envVariables["FOO"], "bar")
         assertEquals(parsed.execConfig.envVariables["BAZ"], "qux")
     }
 
-    func testCommentsOutsideRegeneratedTablesSurvive() {
+    @Test func testCommentsOutsideRegeneratedTablesSurvive() {
         var document = TomlBlockDocument("# my note\nstart-at-login = false\n\n[mode.main.binding]\nalt-h = 'focus left'\n")
         let original = ConfigTomlWriter.draft(from: defaultConfig, rawExec: RawExecConfig(), document: document)
         var draft = original
@@ -268,20 +269,20 @@ final class ConfigTomlWriterTest: XCTestCase {
         assertEquals(document.render().contains("alt-h = 'focus left'"), true)
     }
 
-    func testAppliedToDefaultConfigStillParses() {
+    @Test func testAppliedToDefaultConfigStillParses() {
         let text = try! String(
             contentsOf: projectRoot.appending(component: "docs/config-examples/default-config.toml"),
             encoding: .utf8,
         )
         var document = TomlBlockDocument(text)
-        let (config, errors) = parseConfig(text)
+        let (config, errors) = parseConfigTuple(text)
         assertEquals(errors, [])
         let original = ConfigTomlWriter.draft(from: config, rawExec: RawExecConfig(), document: document)
         var draft = original
         draft.accordionPadding = 99
-        draft.gaps = draft.gaps.copy(\.inner.vertical, .constant(7))
+        draft.gaps = draft.gaps.with(\.inner.vertical, .constant(7))
         ConfigTomlWriter.apply(draft, original: original, to: &document)
-        let (reparsed, reErrors) = parseConfig(document.render())
+        let (reparsed, reErrors) = parseConfigTuple(document.render())
         assertEquals(reErrors, [], additionalMsg: document.render())
         assertEquals(reparsed.accordionPadding, 99)
         assertEquals(reparsed.gaps.inner.vertical, .constant(7))
@@ -299,7 +300,7 @@ final class ConfigTomlWriterTest: XCTestCase {
         )
     }
 
-    func testApplyingAnUnchangedDraftIsByteIdentical() {
+    @Test func testApplyingAnUnchangedDraftIsByteIdentical() {
         // The whole feature's promise, on the whole stock config: opening the window and
         // saving without touching anything must give back exactly the bytes that went in —
         // no reflowed multi-line `persistent-workspaces`, no re-indented `[gaps]`, no
@@ -307,7 +308,7 @@ final class ConfigTomlWriterTest: XCTestCase {
         // from under the comments that explain them.
         let text = defaultConfigText()
         var document = TomlBlockDocument(text)
-        let (config, errors) = parseConfig(text)
+        let (config, errors) = parseConfigTuple(text)
         assertEquals(errors, [])
         let draft = ConfigTomlWriter.draft(
             from: config,
@@ -318,14 +319,14 @@ final class ConfigTomlWriterTest: XCTestCase {
         assertEquals(document.render(), text)
     }
 
-    func testAnUnrelatedEditLeavesEveryOtherRegionAlone() {
+    @Test func testAnUnrelatedEditLeavesEveryOtherRegionAlone() {
         // The realistic save: one toggle flipped, everything else untouched. Only the
         // `start-at-login` line may differ — in particular the four regenerated tables must
         // stay exactly where and how they were, even though `[gaps]` (all zeroes) and
         // `[key-mapping]` (preset 'qwerty') both hold nothing but default values.
         let text = defaultConfigText()
         var document = TomlBlockDocument(text)
-        let (config, errors) = parseConfig(text)
+        let (config, errors) = parseConfigTuple(text)
         assertEquals(errors, [])
         let original = ConfigTomlWriter.draft(
             from: config,
@@ -337,21 +338,21 @@ final class ConfigTomlWriterTest: XCTestCase {
         ConfigTomlWriter.apply(draft, original: original, to: &document)
 
         let rendered = document.render()
-        assertEquals(rendered, text.replacingOccurrences(of: "start-at-login = false", with: "start-at-login = true"))
+        assertEquals(rendered, text.replacing("start-at-login = false", with: "start-at-login = true"))
         for table in ConfigTomlWriter.regeneratedTables {
             assertEquals(rendered.contains("[\(table)]"), text.contains("[\(table)]"), additionalMsg: table)
         }
-        let (reparsed, reErrors) = parseConfig(rendered)
+        let (reparsed, reErrors) = parseConfigTuple(rendered)
         assertEquals(reErrors, [], additionalMsg: rendered)
         assertEquals(reparsed.startAtLogin, true)
     }
 
-    func testTablesHoldingOnlyDefaultsSurviveAnUnrelatedEdit() {
+    @Test func testTablesHoldingOnlyDefaultsSurviveAnUnrelatedEdit() {
         // The narrow form of the above, spelled out: `replaceTable(named:with: nil)` deletes
         // a family whose values equal the defaults, so an untouched one must never reach it.
         let text = "[key-mapping]\npreset = 'qwerty'\n\n[gaps]\ninner.horizontal = 0\n"
         var document = TomlBlockDocument(text)
-        let (config, errors) = parseConfig(text)
+        let (config, errors) = parseConfigTuple(text)
         assertEquals(errors, [])
         let original = ConfigTomlWriter.draft(from: config, rawExec: RawExecConfig(), document: document)
         var draft = original
@@ -360,7 +361,7 @@ final class ConfigTomlWriterTest: XCTestCase {
         assertEquals(document.render(), "start-at-login = true\n" + text)
     }
 
-    func testNotationAndEnvVarNamesAreQuotedOnlyWhenTheyHaveToBe() {
+    @Test func testNotationAndEnvVarNamesAreQuotedOnlyWhenTheyHaveToBe() {
         // A bare key can't carry a dot (it would nest a sub-table) or a space (invalid
         // TOML); an ordinary name must still be spelled bare, the way a human would.
         var document = TomlBlockDocument("")
@@ -375,7 +376,7 @@ final class ConfigTomlWriterTest: XCTestCase {
         }
     }
 
-    func testEditingExecPreservesAnInterpolatedValueAndAQuotedVariableName() {
+    @Test func testEditingExecPreservesAnInterpolatedValueAndAQuotedVariableName() {
         // `Config.execConfig` holds an expanded environment, not the text that was in the
         // file. The Settings window has to use RawExecConfig for the draft, otherwise a
         // save after changing only `inherit-env-vars` would bake the process's PATH into
@@ -388,7 +389,7 @@ final class ConfigTomlWriterTest: XCTestCase {
             'MY.PATH' = '/tools:${PATH}'
             """
         var document = TomlBlockDocument(text)
-        let (config, errors) = parseConfig(text)
+        let (config, errors) = parseConfigTuple(text)
         assertEquals(errors, [])
         let original = ConfigTomlWriter.draft(
             from: config,
@@ -406,7 +407,7 @@ final class ConfigTomlWriterTest: XCTestCase {
         assertEquals(SettingsModel.rawExecConfig(from: rendered).overriddenVars, ["MY.PATH": "/tools:${PATH}"])
     }
 
-    func testEditingCallbacksKeepsUnrelatedTopLevelText() {
+    @Test func testEditingCallbacksKeepsUnrelatedTopLevelText() {
         // The Callbacks pane removes and reinserts only its owned callback keys. Its edit
         // must not discard a future top-level option or its surrounding comment.
         let text = """

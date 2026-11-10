@@ -1,46 +1,48 @@
 @testable import AppBundle
 import Common
-import XCTest
+import Foundation
+import Testing
 
 @MainActor
-final class ListWindowsTest: XCTestCase {
-    override func setUp() async throws { setUpWorkspacesForTests() }
+@Suite(.serializedGlobally)
+struct ListWindowsTest {
+    init() { setUpWorkspacesForTests() }
 
-    func testParse() {
+    @Test func testParse() {
         assertEquals(parseCommand("list-windows --pid 1").errorOrNil, "Mandatory option is not specified (--focused|--all|--monitor|--workspace)")
         assertNil(parseCommand("list-windows --workspace M --pid 1").errorOrNil)
         assertEquals(parseCommand("list-windows --pid 1 --focused").errorOrNil, "--focused conflicts with other \"filtering\" flags")
         assertEquals(parseCommand("list-windows --pid 1 --all").errorOrNil, "--all conflicts with \"filtering\" flags. Please use '--monitor all' instead of '--all' alias")
         assertNil(parseCommand("list-windows --all").errorOrNil)
-        assertEquals(parseCommand("list-windows --all --workspace M").errorOrNil, "ERROR: Conflicting options: --all, --workspace")
-        assertEquals(parseCommand("list-windows --all --focused").errorOrNil, "ERROR: Conflicting options: --all, --focused")
-        assertEquals(parseCommand("list-windows --all --count --format %{window-title}").errorOrNil, "ERROR: Conflicting options: --count, --format")
+        assertEquals(parseCommand("list-windows --all --workspace M").errorOrNil, "ERROR: Conflicting flags: --all, --workspace")
+        assertEquals(parseCommand("list-windows --all --focused").errorOrNil, "ERROR: Conflicting flags: --all, --focused")
+        assertEquals(parseCommand("list-windows --all --count --format %{window-title}").errorOrNil, "ERROR: Conflicting flags: --count, --format")
         assertEquals(
             parseCommand("list-windows --all --focused --monitor mouse").errorOrNil,
-            "ERROR: Conflicting options: --all, --focused")
+            "ERROR: Conflicting flags: --all, --focused")
         assertEquals(
             parseCommand("list-windows --all --focused --monitor mouse --workspace focused").errorOrNil,
-            "ERROR: Conflicting options: --all, --focused, --workspace")
+            "ERROR: Conflicting flags: --all, --focused, --workspace")
         assertEquals(
             parseCommand("list-windows --all --workspace focused").errorOrNil,
-            "ERROR: Conflicting options: --all, --workspace")
+            "ERROR: Conflicting flags: --all, --workspace")
         assertNil(parseCommand("list-windows --monitor mouse").errorOrNil)
 
         // --json
-        assertEquals(parseCommand("list-windows --all --count --json").errorOrNil, "ERROR: Conflicting options: --count, --json")
+        assertEquals(parseCommand("list-windows --all --count --json").errorOrNil, "ERROR: Conflicting flags: --count, --json")
         assertEquals(parseCommand("list-windows --all --format '%{right-padding}' --json").errorOrNil, "%{right-padding} interpolation variable is not allowed when --json is used")
         assertEquals(parseCommand("list-windows --all --format '%{window-title} |' --json").errorOrNil, "Only interpolation variables and spaces are allowed in \'--format\' when \'--json\' is used")
         assertNil(parseCommand("list-windows --all --format '%{window-title}' --json").errorOrNil)
     }
 
-    func testParseSort() {
+    @Test func testParseSort() {
         // Default sort
-        assertEquals((parseCommand("list-windows --all").cmdOrNil as? ListWindowsCommand)?.args.sort, [.appName, .windowTitle])
+        assertEquals((parseCommand("list-windows --all").singleCmdOrNil as? ListWindowsCommand)?.args.sort, [.appName, .windowTitle])
         // Single value
-        assertEquals((parseCommand("list-windows --all --sort recent").cmdOrNil as? ListWindowsCommand)?.args.sort, [.recent])
+        assertEquals((parseCommand("list-windows --all --sort recent").singleCmdOrNil as? ListWindowsCommand)?.args.sort, [.recent])
         // Comma-separated multi value
         assertEquals(
-            (parseCommand("list-windows --all --sort recent,app-name,window-title").cmdOrNil as? ListWindowsCommand)?.args.sort,
+            (parseCommand("list-windows --all --sort recent,app-name,window-title").singleCmdOrNil as? ListWindowsCommand)?.args.sort,
             [.recent, .appName, .windowTitle],
         )
         // Invalid value
@@ -49,7 +51,7 @@ final class ListWindowsTest: XCTestCase {
         assertEquals(parseCommand("list-windows --all --sort").errorOrNil, "ERROR: '--sort' requires a value. Valid options: recent, app-name, window-title")
     }
 
-    func testSortOrdering() {
+    @Test func testSortOrdering() {
         Workspace.get(byName: name).rootTilingContainer.apply {
             let w1 = TestWindow.new(id: 1, parent: $0)
             let w2 = TestWindow.new(id: 2, parent: $0)
@@ -72,7 +74,7 @@ final class ListWindowsTest: XCTestCase {
         }
     }
 
-    func testInterpolationVariablesConsistency() {
+    @Test func testInterpolationVariablesConsistency() {
         for kind in AeroObjKind.allCases {
             switch kind {
                 case .window:
@@ -87,13 +89,13 @@ final class ListWindowsTest: XCTestCase {
         }
     }
 
-    func testFormat() {
+    @Test func testFormat() {
         Workspace.get(byName: name).rootTilingContainer.apply {
             let windows = [
                 AeroObj.window(.forTest(window: TestWindow.new(id: 2, parent: $0), title: "non-empty")),
                 AeroObj.window(.forTest(window: TestWindow.new(id: 1, parent: $0), title: "")),
             ]
-            assertEquals(windows.format([.interVar("window-title")]), .success(["non-empty", ""]))
+            assertSucc(windows.format([.interVar(.formatVar(.window(.windowTitle)))]), ["non-empty", ""])
         }
 
         Workspace.get(byName: name).rootTilingContainer.apply {
@@ -101,7 +103,7 @@ final class ListWindowsTest: XCTestCase {
                 AeroObj.window(.forTest(window: TestWindow.new(id: 2, parent: $0), title: "non-empty")),
                 AeroObj.window(.forTest(window: TestWindow.new(id: 10, parent: $0), title: "")),
             ]
-            assertEquals(windows.format([.interVar("window-id"), .interVar("right-padding"), .interVar("window-title")]), .success(["2 non-empty", "10"]))
+            assertSucc(windows.format([.interVar(.formatVar(.window(.windowId))), .interVar(.plainInterVar(.rightPadding)), .interVar(.formatVar(.window(.windowTitle)))]), ["2 non-empty", "10"])
         }
 
         Workspace.get(byName: name).rootTilingContainer.apply {
@@ -109,11 +111,11 @@ final class ListWindowsTest: XCTestCase {
                 AeroObj.window(.forTest(window: TestWindow.new(id: 2, parent: $0), title: "title1")),
                 AeroObj.window(.forTest(window: TestWindow.new(id: 10, parent: $0), title: "title2")),
             ]
-            assertEquals(windows.format([.interVar("window-id"), .interVar("right-padding"), .literal(" | "), .interVar("window-title")]), .success(["2  | title1", "10 | title2"]))
+            assertSucc(windows.format([.interVar(.formatVar(.window(.windowId))), .interVar(.plainInterVar(.rightPadding)), .literal(" | "), .interVar(.formatVar(.window(.windowTitle)))]), ["2  | title1", "10 | title2"])
         }
     }
 
-    func testAllFormatVariable() {
+    @Test func testAllFormatVariable() {
         // Test that %{all} without --json fails at parsing level
         assertEquals(parseCommand("list-windows --all --format '%{all}'").errorOrNil, "'%{all}' format option requires --json flag")
 
@@ -129,14 +131,14 @@ final class ListWindowsTest: XCTestCase {
         assertNil(parseCommand("list-windows --all --format ' %{all} ' --json").errorOrNil)
     }
 
-    func testOrientationInterpolationVariables() {
+    @Test func testOrientationInterpolationVariables() {
         Workspace.get(byName: name).rootTilingContainer.apply {
             $0.changeOrientation(.h)
             let window = TestWindow.new(id: 1, parent: $0)
             let windows = [AeroObj.window(.forTest(window: window, title: "test"))]
-            assertEquals(
-                windows.format([.interVar("window-parent-container-orientation")]),
-                .success(["horizontal"]),
+            assertSucc(
+                windows.format([interVar("window-parent-container-orientation")]),
+                ["horizontal"],
             )
         }
 
@@ -144,9 +146,9 @@ final class ListWindowsTest: XCTestCase {
             $0.changeOrientation(.v)
             let window = TestWindow.new(id: 2, parent: $0)
             let windows = [AeroObj.window(.forTest(window: window, title: "test"))]
-            assertEquals(
-                windows.format([.interVar("window-parent-container-orientation")]),
-                .success(["vertical"]),
+            assertSucc(
+                windows.format([interVar("window-parent-container-orientation")]),
+                ["vertical"],
             )
         }
 
@@ -154,9 +156,9 @@ final class ListWindowsTest: XCTestCase {
             $0.changeOrientation(.h)
             let workspace = Workspace.get(byName: name)
             let workspaces = [AeroObj.workspace(workspace)]
-            assertEquals(
-                workspaces.format([.interVar("workspace-root-container-orientation")]),
-                .success(["horizontal"]),
+            assertSucc(
+                workspaces.format([interVar("workspace-root-container-orientation")]),
+                ["horizontal"],
             )
         }
 
@@ -164,9 +166,9 @@ final class ListWindowsTest: XCTestCase {
             $0.changeOrientation(.v)
             let workspace = Workspace.get(byName: name)
             let workspaces = [AeroObj.workspace(workspace)]
-            assertEquals(
-                workspaces.format([.interVar("workspace-root-container-orientation")]),
-                .success(["vertical"]),
+            assertSucc(
+                workspaces.format([interVar("workspace-root-container-orientation")]),
+                ["vertical"],
             )
         }
 
@@ -175,9 +177,9 @@ final class ListWindowsTest: XCTestCase {
             let nestedContainer = TilingContainer.newVTiles(parent: root, adaptiveWeight: 1, index: 0)
             let window = TestWindow.new(id: 3, parent: nestedContainer)
             let windows = [AeroObj.window(.forTest(window: window, title: "nested"))]
-            assertEquals(
-                windows.format([.interVar("window-parent-container-orientation")]),
-                .success(["vertical"]),
+            assertSucc(
+                windows.format([interVar("window-parent-container-orientation")]),
+                ["vertical"],
             )
         }
 
@@ -185,14 +187,142 @@ final class ListWindowsTest: XCTestCase {
             $0.changeOrientation(.h)
             let window = TestWindow.new(id: 4, parent: $0)
             let windows = [AeroObj.window(.forTest(window: window, title: "combined"))]
-            assertEquals(
+            assertSucc(
                 windows.format([
-                    .interVar("window-parent-container-orientation"),
+                    interVar("window-parent-container-orientation"),
                     .literal(" | "),
-                    .interVar("window-parent-container-layout"),
+                    interVar("window-parent-container-layout"),
                 ]),
-                .success(["horizontal | h_tiles"]),
+                ["horizontal | h_tiles"],
             )
         }
     }
+
+    @Test func testRunFocusedNoWindow() async {
+        let result = await parseCommand("list-windows --focused --format '%{window-id}'").cmdOrDie.run(.defaultEnv, .emptyStdin)
+        assertEquals(result.exitCode.rawValue, 2)
+        assertEquals(result.stderr, [noWindowIsFocused])
+        assertEquals(result.stdout, [])
+    }
+
+    @Test func testRunFocusedHappy() async {
+        Workspace.get(byName: name).rootTilingContainer.apply {
+            assertEquals(TestWindow.new(id: 1, parent: $0).focusWindow(), true)
+            TestWindow.new(id: 2, parent: $0)
+        }
+        let result = await parseCommand("list-windows --focused --format '%{window-id}'").cmdOrDie.run(.defaultEnv, .emptyStdin)
+        assertEquals(result.exitCode.rawValue, 0)
+        assertEquals(result.stderr, [])
+        assertEquals(result.stdout, ["1"])
+    }
+
+    @Test func testRunAll() async {
+        TestWindow.new(id: 1, parent: Workspace.get(byName: "a").rootTilingContainer)
+        TestWindow.new(id: 2, parent: Workspace.get(byName: "b").rootTilingContainer)
+        let result = await parseCommand("list-windows --all --format '%{window-id}'").cmdOrDie.run(.defaultEnv, .emptyStdin)
+        assertEquals(result.exitCode.rawValue, 0)
+        assertEquals(result.stderr, [])
+        assertEquals(result.stdout.sorted(), ["1", "2"])
+    }
+
+    @Test func testRunCount() async {
+        let workspace = Workspace.get(byName: "a")
+        TestWindow.new(id: 1, parent: workspace.rootTilingContainer)
+        TestWindow.new(id: 2, parent: workspace.rootTilingContainer)
+        TestWindow.new(id: 3, parent: Workspace.get(byName: "b").rootTilingContainer)
+        let result = await parseCommand("list-windows --all --count").cmdOrDie.run(.defaultEnv, .emptyStdin)
+        assertEquals(result.exitCode.rawValue, 0)
+        assertEquals(result.stdout, ["3"])
+    }
+
+    @Test func testRunAllSkipsTombstones() async {
+        let workspace = Workspace.get(byName: "a")
+        TestWindow.new(id: 1, parent: workspace.rootTilingContainer)
+        TestWindow.new(id: 2, parent: workspace.rootTilingContainer).lifeStatus = .dead
+        TestWindow.new(id: 3, parent: workspace.rootTilingContainer).lifeStatus = .invisible
+        TestWindow.new(id: 4, parent: Workspace.get(byName: "b").rootTilingContainer).lifeStatus = .invisible
+
+        let list = await parseCommand("list-windows --all --format '%{window-id}'").cmdOrDie.run(.defaultEnv, .emptyStdin)
+        assertEquals(list.exitCode.rawValue, 0)
+        assertEquals(list.stdout, ["1"])
+
+        let count = await parseCommand("list-windows --all --count").cmdOrDie.run(.defaultEnv, .emptyStdin)
+        assertEquals(count.exitCode.rawValue, 0)
+        assertEquals(count.stdout, ["1"])
+    }
+
+    @Test func testRunJson() async {
+        TestWindow.new(id: 7, parent: Workspace.get(byName: "a").rootTilingContainer)
+        let result = await parseCommand("list-windows --all --format '%{window-id}' --json").cmdOrDie.run(.defaultEnv, .emptyStdin)
+        let expected = JSONEncoder.aeroSpaceDefault.encodeToString([["window-id": 7]])
+        assertEquals(result.exitCode.rawValue, 0)
+        assertEquals(result.stdout, [expected])
+    }
+
+    @Test func testRunFilterByWorkspaceName() async {
+        TestWindow.new(id: 1, parent: Workspace.get(byName: "a").rootTilingContainer)
+        TestWindow.new(id: 2, parent: Workspace.get(byName: "b").rootTilingContainer)
+        let result = await parseCommand("list-windows --workspace a --format '%{window-id}'").cmdOrDie.run(.defaultEnv, .emptyStdin)
+        assertEquals(result.exitCode.rawValue, 0)
+        assertEquals(result.stdout, ["1"])
+    }
+
+    @Test func testRunFilterByWorkspaceFocused() async {
+        let workspaceA = Workspace.get(byName: "a")
+        TestWindow.new(id: 1, parent: workspaceA.rootTilingContainer)
+        TestWindow.new(id: 2, parent: Workspace.get(byName: "b").rootTilingContainer)
+        assertEquals(workspaceA.focusWorkspace(), true)
+        let result = await parseCommand("list-windows --workspace focused --format '%{window-id}'").cmdOrDie.run(.defaultEnv, .emptyStdin)
+        assertEquals(result.exitCode.rawValue, 0)
+        assertEquals(result.stdout, ["1"])
+    }
+
+    @Test func testRunFilterByWorkspaceVisible() async {
+        let workspaceA = Workspace.get(byName: "a")
+        TestWindow.new(id: 1, parent: workspaceA.rootTilingContainer)
+        TestWindow.new(id: 2, parent: Workspace.get(byName: "b").rootTilingContainer)
+        assertEquals(workspaceA.focusWorkspace(), true)
+        let result = await parseCommand("list-windows --workspace visible --format '%{window-id}'").cmdOrDie.run(.defaultEnv, .emptyStdin)
+        assertEquals(result.exitCode.rawValue, 0)
+        assertEquals(result.stdout, ["1"])
+    }
+
+    @Test func testRunFilterByMonitor() async {
+        TestWindow.new(id: 1, parent: Workspace.get(byName: "a").rootTilingContainer)
+        let result = await parseCommand("list-windows --monitor focused --format '%{window-id}'").cmdOrDie.run(.defaultEnv, .emptyStdin)
+        assertEquals(result.exitCode.rawValue, 0)
+        assertEquals(result.stdout, ["1"])
+    }
+
+    @Test func testRunInvalidMonitor() async {
+        TestWindow.new(id: 1, parent: Workspace.get(byName: "a").rootTilingContainer)
+        let result = await parseCommand("list-windows --monitor 99 --format '%{window-id}'").cmdOrDie.run(.defaultEnv, .emptyStdin)
+        assertEquals(result.exitCode.rawValue, 2)
+        assertEquals(result.stdout, [])
+        assertEquals(result.stderr, ["Invalid monitor ID: 99"])
+    }
+
+    @Test func testRunFilterByPid() async {
+        TestWindow.new(id: 1, parent: Workspace.get(byName: "a").rootTilingContainer)
+        let matching = await parseCommand("list-windows --monitor all --pid 0 --format '%{window-id}'").cmdOrDie.run(.defaultEnv, .emptyStdin)
+        assertEquals(matching.exitCode.rawValue, 0)
+        assertEquals(matching.stdout, ["1"])
+
+        let mismatching = await parseCommand("list-windows --monitor all --pid 9999 --format '%{window-id}'").cmdOrDie.run(.defaultEnv, .emptyStdin)
+        assertEquals(mismatching.exitCode.rawValue, 0)
+        assertEquals(mismatching.stdout, [])
+    }
+
+    @Test func testRunFilterByAppBundleId() async {
+        TestWindow.new(id: 1, parent: Workspace.get(byName: "a").rootTilingContainer)
+        let matching = await parseCommand("list-windows --monitor all --app-bundle-id bobko.AeroSpace.test-app --format '%{window-id}'").cmdOrDie.run(.defaultEnv, .emptyStdin)
+        assertEquals(matching.exitCode.rawValue, 0)
+        assertEquals(matching.stdout, ["1"])
+
+        let mismatching = await parseCommand("list-windows --monitor all --app-bundle-id com.unknown.app --format '%{window-id}'").cmdOrDie.run(.defaultEnv, .emptyStdin)
+        assertEquals(mismatching.exitCode.rawValue, 0)
+        assertEquals(mismatching.stdout, [])
+    }
 }
+
+private func interVar(_ raw: String) -> InterToken<InterVar> { .interVar(InterVar(rawValue: raw).orDie()) }

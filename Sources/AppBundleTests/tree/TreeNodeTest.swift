@@ -1,37 +1,38 @@
 @testable import AppBundle
-import XCTest
+import Testing
 
 @MainActor
-final class TreeNodeTest: XCTestCase {
-    override func setUp() async throws { setUpWorkspacesForTests() }
+@Suite(.serializedGlobally)
+struct TreeNodeTest {
+    init() { setUpWorkspacesForTests() }
 
-    func testChildParentCyclicReferenceMemoryLeak() {
+    @Test func testChildParentCyclicReferenceMemoryLeak() {
         let workspace = Workspace.get(byName: name) // Don't cache root node
         let window = TestWindow.new(id: 1, parent: workspace.rootTilingContainer)
 
-        XCTAssertTrue(window.parent != nil)
+        #expect(window.parent != nil)
         workspace.rootTilingContainer.unbindFromParent()
-        XCTAssertTrue(window.parent == nil)
+        #expect(window.parent == nil)
     }
 
-    func testIsEffectivelyEmpty() {
+    @Test func testIsEffectivelyEmpty() {
         let workspace = Workspace.get(byName: name)
 
-        XCTAssertTrue(workspace.isEffectivelyEmpty)
+        #expect(workspace.isEffectivelyEmpty)
         weak let window: TestWindow? = .new(id: 1, parent: workspace.rootTilingContainer)
-        XCTAssertNotEqual(window, nil)
-        XCTAssertTrue(!workspace.isEffectivelyEmpty)
+        #expect(window != nil)
+        #expect(!workspace.isEffectivelyEmpty)
         window!.unbindFromParent()
-        XCTAssertTrue(workspace.isEffectivelyEmpty)
+        #expect(workspace.isEffectivelyEmpty)
 
         // Don't save to local variable
         TestWindow.new(id: 2, parent: workspace.rootTilingContainer)
-        XCTAssertTrue(!workspace.isEffectivelyEmpty)
+        #expect(!workspace.isEffectivelyEmpty)
     }
 
-    // The fork keeps floating windows as direct children of the workspace (upstream has a floating windows container),
-    // so the container that stays the most recent child after its last window is gone is the macOS fullscreen one
-    func testToLiveFocus_skipsEmptyMacosFullscreenContainer() {
+    // Fork (upstream PR #2348): a container can stay the most recent child of the workspace after its last window is gone.
+    // toLiveFocus must skip it instead of falling back to the first leaf in tree order
+    @Test func testToLiveFocus_skipsEmptyMacosFullscreenContainer() {
         let workspace = Workspace.get(byName: name)
         workspace.rootTilingContainer.apply {
             TestWindow.new(id: 1, parent: $0)
@@ -44,10 +45,24 @@ final class TreeNodeTest: XCTestCase {
         assertEquals(workspace.toLiveFocus().windowOrNil?.windowId, 2)
     }
 
-    func testToLiveFocus_skipsEmptyTilingContainer() {
+    // Upstream re-introduced a floating windows container, which can be left empty as the most recent child the same way
+    @Test func testToLiveFocus_skipsEmptyFloatingWindowsContainer() {
         let workspace = Workspace.get(byName: name)
-        TestWindow.new(id: 1, parent: workspace)
-        assertTrue(TestWindow.new(id: 2, parent: workspace).focusWindow())
+        workspace.rootTilingContainer.apply {
+            TestWindow.new(id: 1, parent: $0)
+            assertTrue(TestWindow.new(id: 2, parent: $0).focusWindow())
+        }
+        let floatingWindow = TestWindow.new(id: 3, parent: workspace.floatingWindowsContainer)
+        assertTrue(floatingWindow.focusWindow())
+
+        floatingWindow.unbindFromParent()
+        assertEquals(workspace.toLiveFocus().windowOrNil?.windowId, 2)
+    }
+
+    @Test func testToLiveFocus_skipsEmptyTilingContainer() {
+        let workspace = Workspace.get(byName: name)
+        TestWindow.new(id: 1, parent: workspace.floatingWindowsContainer)
+        assertTrue(TestWindow.new(id: 2, parent: workspace.floatingWindowsContainer).focusWindow())
         let tilingWindow = TestWindow.new(id: 3, parent: workspace.rootTilingContainer)
         assertTrue(tilingWindow.focusWindow())
 
@@ -55,14 +70,33 @@ final class TreeNodeTest: XCTestCase {
         assertEquals(workspace.toLiveFocus().windowOrNil?.windowId, 2)
     }
 
-    func testNormalizeContainers_dontRemoveRoot() {
+    @Test func testBindWeightAuto_skipsTombstones() {
+        let root = Workspace.get(byName: name).rootTilingContainer
+        TestWindow.new(id: 1, parent: root, adaptiveWeight: 2)
+        TestWindow.new(id: 2, parent: root, adaptiveWeight: 10).lifeStatus = .invisible
+        TestWindow.new(id: 3, parent: root, adaptiveWeight: 4)
+        TilingContainer.newVTiles(parent: root, adaptiveWeight: 20).lifeStatus = .deadOrInvisible
+
+        let window = TestWindow.new(id: 4, parent: root, adaptiveWeight: WEIGHT_AUTO)
+        assertEquals(window.getWeight(root.orientation), 3) // (2 + 4) / 2
+    }
+
+    @Test func testBindWeightAuto_onlyTombstoneSiblings() {
+        let root = Workspace.get(byName: name).rootTilingContainer
+        TestWindow.new(id: 1, parent: root, adaptiveWeight: 10).lifeStatus = .dead
+
+        let window = TestWindow.new(id: 2, parent: root, adaptiveWeight: WEIGHT_AUTO)
+        assertEquals(window.getWeight(root.orientation), 1)
+    }
+
+    @Test func testNormalizeContainers_dontRemoveRoot() {
         let workspace = Workspace.get(byName: name)
         weak let root = workspace.rootTilingContainer
         func test() {
-            XCTAssertNotEqual(root, nil)
-            XCTAssertTrue(root!.isEffectivelyEmpty)
+            #expect(root != nil)
+            #expect(root!.isEffectivelyEmpty)
             workspace.normalizeContainers()
-            XCTAssertNotEqual(root, nil)
+            #expect(root != nil)
         }
         test()
 
@@ -70,7 +104,7 @@ final class TreeNodeTest: XCTestCase {
         test()
     }
 
-    func testNormalizeContainers_singleWindowChild() {
+    @Test func testNormalizeContainers_singleWindowChild() {
         config.enableNormalizationFlattenContainers = true
         let workspace = Workspace.get(byName: name)
         workspace.rootTilingContainer.apply {
@@ -86,7 +120,26 @@ final class TreeNodeTest: XCTestCase {
         )
     }
 
-    func testNormalizeContainers_removeEffectivelyEmpty() {
+    @Test func testNormalizeContainers_rootSingleContainerChild() {
+        config.enableNormalizationFlattenContainers = true
+        let workspace = Workspace.get(byName: name)
+        var window3: TestWindow!
+        workspace.rootTilingContainer.apply {
+            TilingContainer.newVTiles(parent: $0, adaptiveWeight: 1).apply {
+                TestWindow.new(id: 1, parent: $0)
+                TestWindow.new(id: 2, parent: $0)
+            }
+            window3 = TestWindow.new(id: 3, parent: $0)
+        }
+        window3.unbindFromParent()
+        workspace.normalizeContainers()
+        assertEquals(
+            workspace.rootTilingContainer.layoutDescription,
+            .v_tiles([.window(1), .window(2)]),
+        )
+    }
+
+    @Test func testNormalizeContainers_removeEffectivelyEmpty() {
         let workspace = Workspace.get(byName: name)
         workspace.rootTilingContainer.apply {
             TilingContainer.newVTiles(parent: $0, adaptiveWeight: 1).apply {
@@ -98,7 +151,7 @@ final class TreeNodeTest: XCTestCase {
         assertEquals(workspace.rootTilingContainer.children.count, 0)
     }
 
-    func testNormalizeContainers_bsp_forceBinary() {
+    @Test func testNormalizeContainers_bsp_forceBinary() {
         config.enableNormalizationBinaryTree = true
         let workspace = Workspace.get(byName: name)
         workspace.rootTilingContainer.apply {
@@ -121,7 +174,7 @@ final class TreeNodeTest: XCTestCase {
         )
     }
 
-    func testNormalizeContainers_bsp_orientsByRect() {
+    @Test func testNormalizeContainers_bsp_orientsByRect() {
         config.enableNormalizationBinaryTree = true
         let workspace = Workspace.get(byName: name)
         // Start with the "wrong" orientation; BSP should flip it.
@@ -138,7 +191,7 @@ final class TreeNodeTest: XCTestCase {
         )
     }
 
-    func testNormalizeContainers_flattenContainers() {
+    @Test func testNormalizeContainers_flattenContainers() {
         let workspace = Workspace.get(byName: name) // Don't cache root node
         workspace.rootTilingContainer.apply {
             TilingContainer.newVTiles(parent: $0, adaptiveWeight: 1).apply {
@@ -146,10 +199,10 @@ final class TreeNodeTest: XCTestCase {
             }
         }
         workspace.normalizeContainers()
-        XCTAssertTrue(workspace.rootTilingContainer.children.singleOrNil() is TilingContainer)
+        #expect(workspace.rootTilingContainer.children.singleOrNil() is TilingContainer)
 
         config.enableNormalizationFlattenContainers = true
         workspace.normalizeContainers()
-        XCTAssertTrue(workspace.rootTilingContainer.children.singleOrNil() is TestWindow)
+        #expect(workspace.rootTilingContainer.children.singleOrNil() is TestWindow)
     }
 }

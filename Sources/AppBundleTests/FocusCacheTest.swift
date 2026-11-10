@@ -1,176 +1,175 @@
 @testable import AppBundle
-import XCTest
+import Testing
 
-final class FocusCacheTest: XCTestCase {
+@MainActor
+@Suite(.serializedGlobally)
+struct FocusCacheTest {
     private let now = ContinuousClock().now
 
-    func testCloseProtectionSuppressesCrossWorkspaceFocus() {
+    @Test func testCloseProtectionSuppressesCrossWorkspaceFocus() {
         var protection = NativeFocusRaceProtection()
         protection.recordWindowClose(workspaceName: "a", now: now)
 
-        XCTAssertTrue(protection.shouldSuppressAfterClose(
+        #expect(protection.shouldSuppressAfterClose(
             currentWorkspaceName: "a",
             nativeWorkspaceName: "b",
             now: now,
         ))
     }
 
-    func testCloseProtectionOnlySuppressesFocusLeavingTheClosedWorkspace() {
+    @Test func testCloseProtectionOnlySuppressesFocusLeavingTheClosedWorkspace() {
         var protection = NativeFocusRaceProtection()
         protection.recordWindowClose(workspaceName: "a", now: now)
 
-        XCTAssertFalse(protection.shouldSuppressAfterClose(
+        #expect(!(protection.shouldSuppressAfterClose(
             currentWorkspaceName: "a",
             nativeWorkspaceName: "a",
             now: now,
-        ))
-        XCTAssertFalse(protection.shouldSuppressAfterClose(
+        )))
+        #expect(!(protection.shouldSuppressAfterClose(
             currentWorkspaceName: "b",
             nativeWorkspaceName: "c",
             now: now,
-        ))
+        )))
     }
 
-    func testCloseProtectionExpires() {
+    @Test func testCloseProtectionExpires() {
         var protection = NativeFocusRaceProtection()
         protection.recordWindowClose(workspaceName: "a", now: now)
 
-        XCTAssertFalse(protection.shouldSuppressAfterClose(
+        #expect(!(protection.shouldSuppressAfterClose(
             currentWorkspaceName: "a",
             nativeWorkspaceName: "b",
             now: now.advanced(by: NativeFocusRaceProtection.closeProtectionDuration),
-        ))
+        )))
     }
 
-    func testAppActivationDelaysCrossWorkspaceFocus() {
+    @Test func testAppActivationDelaysCrossWorkspaceFocus() {
         var protection = NativeFocusRaceProtection()
         protection.recordAppActivation(appPid: 42, now: now)
 
-        XCTAssertEqual(
-            protection.appActivationDelay(
-                appPid: 42,
-                currentWorkspaceName: "a",
-                nativeWorkspaceName: "b",
-                now: now,
-            ),
-            NativeFocusRaceProtection.appActivationGraceDuration,
-        )
-        XCTAssertNil(protection.appActivationDelay(
+        #expect(protection.appActivationDelay(
+            appPid: 42,
+            currentWorkspaceName: "a",
+            nativeWorkspaceName: "b",
+            now: now,
+        ) == NativeFocusRaceProtection.appActivationGraceDuration)
+        #expect(protection.appActivationDelay(
             appPid: 42,
             currentWorkspaceName: "a",
             nativeWorkspaceName: "a",
             now: now,
-        ))
-        XCTAssertNil(protection.appActivationDelay(
+        ) == nil)
+        #expect(protection.appActivationDelay(
             appPid: 7,
             currentWorkspaceName: "a",
             nativeWorkspaceName: "b",
             now: now,
-        ))
+        ) == nil)
     }
 
-    func testSameWorkspaceFocusClearsActivationDelay() {
+    @Test func testSameWorkspaceFocusClearsActivationDelay() {
         var protection = NativeFocusRaceProtection()
         protection.recordAppActivation(appPid: 42, now: now)
         protection.clearAppActivation(appPid: 42)
 
-        XCTAssertNil(protection.appActivationDelay(
+        #expect(protection.appActivationDelay(
             appPid: 42,
             currentWorkspaceName: "a",
             nativeWorkspaceName: "b",
             now: now,
-        ))
+        ) == nil)
     }
 
-    func testWorkspaceSwitchSuppressesDelayedCrossWorkspaceFocus() {
+    @Test func testWorkspaceSwitchSuppressesDelayedCrossWorkspaceFocus() {
         var protection = NativeFocusRaceProtection()
         protection.recordWorkspaceSwitch(workspaceName: "b", now: now)
 
-        XCTAssertTrue(protection.shouldSuppressAfterWorkspaceSwitch(
+        #expect(protection.shouldSuppressAfterWorkspaceSwitch(
             currentWorkspaceName: "b",
             nativeWorkspaceName: "a",
             now: now,
         ))
     }
 
-    func testWorkspaceSwitchOnlyProtectsItsTarget() {
+    @Test func testWorkspaceSwitchOnlyProtectsItsTarget() {
         var protection = NativeFocusRaceProtection()
         protection.recordWorkspaceSwitch(workspaceName: "b", now: now)
 
-        XCTAssertFalse(protection.shouldSuppressAfterWorkspaceSwitch(
+        #expect(!(protection.shouldSuppressAfterWorkspaceSwitch(
             currentWorkspaceName: "b",
             nativeWorkspaceName: "b",
             now: now,
-        ))
-        XCTAssertFalse(protection.shouldSuppressAfterWorkspaceSwitch(
+        )))
+        #expect(!(protection.shouldSuppressAfterWorkspaceSwitch(
             currentWorkspaceName: "c",
             nativeWorkspaceName: "a",
             now: now,
-        ))
+        )))
     }
 
-    func testWorkspaceSwitchProtectionExpires() {
+    @Test func testWorkspaceSwitchProtectionExpires() {
         var protection = NativeFocusRaceProtection()
         protection.recordWorkspaceSwitch(workspaceName: "b", now: now)
 
-        XCTAssertFalse(protection.shouldSuppressAfterWorkspaceSwitch(
+        #expect(!(protection.shouldSuppressAfterWorkspaceSwitch(
             currentWorkspaceName: "b",
             nativeWorkspaceName: "a",
             now: now.advanced(by: NativeFocusRaceProtection.workspaceSwitchProtectionDuration),
-        ))
+        )))
     }
 
-    func testWorkspaceSwitchProtectionCanBeCancelledForMouseIntent() {
+    @Test func testWorkspaceSwitchProtectionCanBeCancelledForMouseIntent() {
         var protection = NativeFocusRaceProtection()
         protection.recordWorkspaceSwitch(workspaceName: "b", now: now)
         protection.clearWorkspaceSwitch()
 
-        XCTAssertFalse(protection.shouldSuppressAfterWorkspaceSwitch(
+        #expect(!(protection.shouldSuppressAfterWorkspaceSwitch(
             currentWorkspaceName: "b",
             nativeWorkspaceName: "a",
             now: now,
-        ))
+        )))
     }
 
-    func testAppSelfActivationIsSuppressedWithoutRecentUserClick() {
+    @Test func testAppSelfActivationIsSuppressedWithoutRecentUserClick() {
         let protection = NativeFocusRaceProtection()
 
-        XCTAssertTrue(protection.shouldSuppressAppSelfActivation(
+        #expect(protection.shouldSuppressAppSelfActivation(
             currentWorkspaceName: "1",
             nativeWorkspaceName: "W",
             now: now,
         ))
     }
 
-    func testAppSelfActivationIsAllowedAfterRecentUserClick() {
+    @Test func testAppSelfActivationIsAllowedAfterRecentUserClick() {
         var protection = NativeFocusRaceProtection()
         protection.recordUserClick(now: now)
 
-        XCTAssertFalse(protection.shouldSuppressAppSelfActivation(
+        #expect(!(protection.shouldSuppressAppSelfActivation(
             currentWorkspaceName: "1",
             nativeWorkspaceName: "W",
             now: now.advanced(by: .milliseconds(500)),
-        ))
+        )))
     }
 
-    func testAppSelfActivationClickIntentExpires() {
+    @Test func testAppSelfActivationClickIntentExpires() {
         var protection = NativeFocusRaceProtection()
         protection.recordUserClick(now: now)
 
-        XCTAssertTrue(protection.shouldSuppressAppSelfActivation(
+        #expect(protection.shouldSuppressAppSelfActivation(
             currentWorkspaceName: "1",
             nativeWorkspaceName: "W",
             now: now.advanced(by: NativeFocusRaceProtection.userClickIntentDuration),
         ))
     }
 
-    func testAppSelfActivationOnSameWorkspaceIsNeverSuppressed() {
+    @Test func testAppSelfActivationOnSameWorkspaceIsNeverSuppressed() {
         let protection = NativeFocusRaceProtection()
 
-        XCTAssertFalse(protection.shouldSuppressAppSelfActivation(
+        #expect(!(protection.shouldSuppressAppSelfActivation(
             currentWorkspaceName: "1",
             nativeWorkspaceName: "1",
             now: now,
-        ))
+        )))
     }
 }

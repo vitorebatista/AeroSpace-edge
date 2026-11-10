@@ -3,30 +3,39 @@ func parseSpecificCmdArgs<T: CmdArgs>(_ raw: T, _ args: StrArrSlice) -> ParsedCm
     var errors: [String] = []
 
     var posArgumentParserIndex = 0
-    var options: Set<String> = Set()
+    var encounteredFlags: Set<String> = Set()
     var index = 0
+    var positionalOnly = false
 
-    while index < args.count {
+    loop: while index < args.count {
         let arg = args[index]
-        if arg == "-h" || arg == "--help" {
-            return .help(T.info.help)
-        } else if arg.starts(with: "-") && !isResizeNegativeUnitsArg(raw, arg: arg) {
-            if let optionParser = T.parser.flags[arg] {
-                index += 1
-                if !options.insert(arg).inserted {
-                    errors.append("Duplicated option \(arg.singleQuoted)")
+
+        switch (positionalOnly, arg) {
+            case (false, "-h"), (false, "--help"):
+                return .help(T.info.help)
+            case (false, _) where arg.isCliDashFlag && !isResizeNegativeUnitsArg(raw, arg: arg):
+                if let optionParser = T.parser.flags[arg] {
+                    index += 1
+                    if !encounteredFlags.insert(arg).inserted {
+                        errors.append("Duplicated flag \(arg.singleQuoted)")
+                    }
+                    raw = optionParser.transformRaw(raw, &index, SubArgParserInput(superArg: arg, index: index, args: args), &errors)
+                } else {
+                    errors.append("Unknown flag \(arg.singleQuoted)")
+                    break loop
                 }
-                raw = optionParser.transformRaw(raw, &index, SubArgParserInput(superArg: arg, index: index, args: args), &errors)
-            } else {
-                errors.append("Unknown flag \(arg.singleQuoted)")
-                break
-            }
-        } else if let parser = T.parser.positionalArgs.getOrNil(atIndex: posArgumentParserIndex) {
-            raw = parser.transformRaw(raw, &index, PosArgParserInput(index: index, args: args), &errors)
-            posArgumentParserIndex += 1
-        } else {
-            errors.append("Unknown argument \(arg.singleQuoted)")
-            break
+            default:
+                if arg == "--" {
+                    positionalOnly = true
+                }
+                if let parser = T.parser.positionalArgs.getOrNil(atIndex: posArgumentParserIndex) {
+                    let input = PosArgParserInput(index: index, args: args, sawDoubleDash: positionalOnly)
+                    raw = parser.transformRaw(raw, &index, input, &errors)
+                    posArgumentParserIndex += 1
+                } else {
+                    errors.append("Unknown argument \(arg.singleQuoted)")
+                    break loop
+                }
         }
     }
 
@@ -36,11 +45,23 @@ func parseSpecificCmdArgs<T: CmdArgs>(_ raw: T, _ args: StrArrSlice) -> ParsedCm
         }
     }
 
-    for conflictSet in T.parser.conflictingOptions {
-        let mutualOptions = conflictSet.intersection(options)
-        if mutualOptions.count > 1 {
-            errors.append("Conflicting options: \(mutualOptions.sorted().joined(separator: ", "))")
+    for conflictSet in T.parser.conflictingFlags {
+        let mutualFlags = conflictSet.intersection(encounteredFlags)
+        if mutualFlags.count > 1 {
+            errors.append("Conflicting flags: \(mutualFlags.sorted().joined(separator: ", "))")
             break
+        }
+    }
+
+    for flag in encounteredFlags {
+        if let allowlist = T.parser.flagAllowlist[flag] {
+            let badFlags = encounteredFlags.subtracting(allowlist).subtracting([flag])
+            if !badFlags.isEmpty {
+                let msg = "Conflicting flags. This flag: '\(flag)' conflicts with these flags: " +
+                    badFlags.sorted().joined(separator: ", ")
+                errors.append(msg)
+                break
+            }
         }
     }
 
@@ -57,18 +78,17 @@ public struct CmdParsingFailure: Sendable, Equatable {
     }
 }
 
-extension ArgParserProtocol where Root: ConvenienceCopyable {
+extension ArgParserProtocol where Root: Withable {
     fileprivate func transformRaw(_ raw: consuming Root, _ index: inout Int, _ input: Input, _ errors: inout [String]) -> Root {
         let parsedCliArgs = parse(input)
         index += parsedCliArgs.advanceBy
         return switch parsedCliArgs.value.getOrNil(appendErrorTo: &errors) {
-            case let value?: raw.copy(keyPath, value)
+            case let value?: raw.with(keyPath, value)
             case nil: raw
         }
     }
 }
 
-// Hack to preserve backwards compatibility
 private func isResizeNegativeUnitsArg(_ raw: any CmdArgs, arg: String) -> Bool {
     var iter = arg.makeIterator()
     return raw is ResizeCmdArgs && iter.next() == "-" && iter.next()?.isNumber == true

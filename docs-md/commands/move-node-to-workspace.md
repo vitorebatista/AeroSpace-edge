@@ -15,7 +15,7 @@ aerospace-edge move-node-to-workspace [-h|--help] [--focus-follows-window] [--wr
                                  [--stdin|--no-stdin]
                                  (next|prev)
 aerospace-edge move-node-to-workspace [-h|--help] [--focus-follows-window] [--fail-if-noop]
-                                 [--window-id <window-id>] <workspace-name>
+                                 [--window-id <window-id>] [--] <workspace-name>
 ```
 
 ## Description
