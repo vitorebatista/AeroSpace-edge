@@ -1,8 +1,10 @@
 @testable import AppBundle
-import XCTest
+import Testing
 
-final class TomlSyntaxTest: XCTestCase {
-    func testColoursTheParts() {
+@MainActor
+@Suite(.serializedGlobally)
+struct TomlSyntaxTest {
+    @Test func testColoursTheParts() {
         assertSpans(
             spans("[mode.main.binding]\nalt-h = 'focus left' # go west\n"),
             [
@@ -14,14 +16,14 @@ final class TomlSyntaxTest: XCTestCase {
         )
     }
 
-    func testHashInsideAStringIsNotAComment() {
+    @Test func testHashInsideAStringIsNotAComment() {
         assertSpans(
             spans("cmd = 'echo #1'\n"),
             [("cmd", .key), ("'echo #1'", .string)],
         )
     }
 
-    func testNumbersAndBooleans() {
+    @Test func testNumbersAndBooleans() {
         assertSpans(
             spans("inner.horizontal = 10\nstart-at-login = true\n"),
             [
@@ -33,28 +35,28 @@ final class TomlSyntaxTest: XCTestCase {
         )
     }
 
-    func testArrayIsNotATableHeader() {
+    @Test func testArrayIsNotATableHeader() {
         assertSpans(
             spans("workspaces = ['1', '2']\n"),
             [("workspaces", .key), ("'1'", .string), ("'2'", .string)],
         )
     }
 
-    func testMultiLineStringSwallowsTheLinesItSpans() {
+    @Test func testMultiLineStringSwallowsTheLinesItSpans() {
         assertSpans(
             spans("run = \"\"\"\n# not a comment\n\"\"\"\n"),
             [("run", .key), ("\"\"\"", .string), ("# not a comment", .string), ("\"\"\"", .string)],
         )
     }
 
-    func testUnterminatedStringStopsAtTheEndOfTheLine() {
+    @Test func testUnterminatedStringStopsAtTheEndOfTheLine() {
         assertSpans(
             spans("cmd = 'oops\nnext = 1\n"),
             [("cmd", .key), ("'oops", .string), ("next", .key), ("1", .number)],
         )
     }
 
-    func testRangesSurviveNonAsciiText() {
+    @Test func testRangesSurviveNonAsciiText() {
         let text = "cmd = 'é🙂' # tail"
         let comment = tomlTokens(text).last!
         assertEquals((text as NSString).substring(with: comment.range), "# tail")
@@ -69,14 +71,12 @@ final class TomlSyntaxTest: XCTestCase {
     private func assertSpans(
         _ actual: [(String, TomlToken.Kind)],
         _ expected: [(String, TomlToken.Kind)],
-        file: StaticString = #filePath,
-        line: UInt = #line,
+        sourceLocation: SourceLocation = #_sourceLocation,
     ) {
-        XCTAssertTrue(
+        #expect(
             actual.count == expected.count && zip(actual, expected).allSatisfy { $0 == $1 },
             "\(actual)\n!=\n\(expected)",
-            file: file,
-            line: line,
+            sourceLocation: sourceLocation,
         )
     }
 }

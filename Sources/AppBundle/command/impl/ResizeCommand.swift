@@ -1,18 +1,18 @@
 import AppKit
 import Common
 
-struct ResizeCommand: Command { // todo cover with tests
+struct ResizeCommand: Command {
     let args: ResizeCmdArgs
     /*conforms*/ let shouldResetClosedWindowsCache = true
 
-    func run(_ env: CmdEnv, _ io: CmdIo) async throws -> BinaryExitCode {
+    func run(_ env: CmdEnv, _ io: CmdIo) async -> BinaryExitCode {
         guard let target = args.resolveTargetOrReportError(env, io) else { return .fail }
 
         if let window = target.windowOrNil, window.isFloating {
-            guard let rect = try await window.getAxRect() else { return .fail }
+            guard let rect = try? await window.getAxRect(.nonCancellable) else { return .fail }
             let size = rect.size
             let topLeftCorner = rect.topLeftCorner
-            let monitorRect = target.workspace.workspaceMonitor.rect
+            let monitorRect = target.workspace.workspaceMonitorInfo.rect
 
             let computeTopLeftCornerAndSize = { (diffSize: CGSize) -> (CGPoint, CGSize) in
                 let newX = if topLeftCorner.x + size.width + diffSize.width / 2 > monitorRect.maxX {
@@ -68,6 +68,13 @@ struct ResizeCommand: Command { // todo cover with tests
 
         let candidates = target.windowOrNil?.parentsWithSelf
             .filter { ($0.parent as? TilingContainer)?.layout == .tiles }
+            .filter {
+                guard let parent = $0.parent as? TilingContainer else { return false }
+                return switch parent.lifeStatus {
+                    case .alive: true
+                    case .mustBeFlattened, .deadOrInvisible: false
+                }
+            }
             ?? []
 
         let orientation: Orientation?
@@ -102,10 +109,11 @@ struct ResizeCommand: Command { // todo cover with tests
             case .subtract(let unit): -CGFloat(unit)
         }
 
-        guard let childDiff = diff.div(parent.children.count - 1) else { return .fail }
-        parent.children.lazy
-            .filter { $0 != node }
-            .forEach { $0.setWeight(parent.orientation, $0.getWeight(parent.orientation) - childDiff) }
+        let inhabitedSiblings = parent.inhabitedChildren.filter { $0 != node }
+        guard let childDiff = diff.div(inhabitedSiblings.count) else { return .fail }
+        for sibling in inhabitedSiblings {
+            sibling.setWeight(parent.orientation, sibling.getWeight(parent.orientation) - childDiff)
+        }
 
         node.setWeight(orientation, node.getWeight(orientation) + diff)
         return .succ

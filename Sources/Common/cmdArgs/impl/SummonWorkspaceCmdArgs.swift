@@ -3,13 +3,15 @@ public struct SummonWorkspaceCmdArgs: CmdArgs {
     public init(rawArgs: StrArrSlice) { self.commonState = .init(rawArgs) }
     public static let parser: CmdParser<Self> = .init(
         kind: .summonWorkspace,
-        allowInConfig: true,
         help: summon_workspace_help_generated,
         flags: [
             "--fail-if-noop": trueBoolFlag(\.failIfNoop),
             "--when-visible": ArgParser(\.rawWhenVisibleAction, upcastArgParserFun(parseWhenVisibleAction)),
         ],
-        posArgs: [newMandatoryPosArgParser(\.target, parseWorkspaceName, placeholder: "<workspace>")],
+        posArgs: [
+            doubleDashArg(mandatory: false),
+            newMandatoryPosArgParser(\.target, parseWorkspaceName, placeholder: "<workspace>"),
+        ],
     )
 
     public var target: Lateinit<WorkspaceName> = .uninitialized

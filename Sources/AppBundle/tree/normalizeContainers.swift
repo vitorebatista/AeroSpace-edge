@@ -19,37 +19,65 @@ extension Config {
 
 extension Workspace {
     @MainActor func normalizeContainers() {
-        // Always called: the function also removes effectively-empty containers
-        // regardless of the flatten flag.
-        // Beware! rootTilingContainer may change after this line of code
-        rootTilingContainer.unbindEmptyAndAutoFlatten(allowFlatten: isNormalizationEnabled(.flattenContainers))
+        let root = rootTilingContainer
+        // Always called: the function also removes effectively-empty containers and sets lifeStatus
+        // regardless of the flatten flag. The flatten flag honours per-workspace overrides (fork: enable-normalization)
+        root.unbindEmptyAndFlattenContainersRecursive(allowFlatten: isNormalizationEnabled(.flattenContainers))
+        // rootTilingContainer.deriveAxLifeStatusRecursive()
         if config.enableNormalizationBinaryTree {
-            rootTilingContainer.normalizeBinaryTree(rect: workspaceMonitor.visibleRectPaddedByOuterGaps)
+            rootTilingContainer.normalizeBinaryTree(rect: workspaceMonitorInfo.visibleRectPaddedByOuterGaps)
         } else if isNormalizationEnabled(.oppositeOrientationForNestedContainers) {
-            rootTilingContainer.normalizeOppositeOrientationForNestedContainers()
+            rootTilingContainer.normalizeOppositeOrientationForNestedContainersRecursive(parentOrientation: nil)
         }
     }
 }
 
 extension TilingContainer {
-    @MainActor fileprivate func unbindEmptyAndAutoFlatten(allowFlatten: Bool) {
-        if let child = children.singleOrNil(), allowFlatten && (child is TilingContainer || !isRootContainer) {
+    /// This function has probably way too many responsibilities:
+    /// 1. It unbinds empty containers
+    /// 2. It flattens containers that contain only a single child (excluding the root container)
+    /// 3. It sets correct lifeStatus values
+    ///
+    /// todo: It's not clear what happens with mru in this function (does mru get rewritten by the recursive calls?).
+    ///       Is it O(n^2) complexity?
+    @MainActor fileprivate func unbindEmptyAndFlattenContainersRecursive(allowFlatten: Bool) {
+        if isRootContainer { // Special logic for root node to keep it always bound
+            if let child = children.singleOrNil() as? TilingContainer, allowFlatten {
+                child.unbindFromParent()
+                for grandChild in child.children {
+                    let data = grandChild.unbindFromParent()
+                    grandChild.bind(to: self, adaptiveWeight: data.adaptiveWeight, index: INDEX_BIND_LAST)
+                }
+                self.copyFrom(child)
+            }
+            for child in children {
+                (child as? TilingContainer)?.unbindEmptyAndFlattenContainersRecursive(allowFlatten: allowFlatten)
+            }
+            self.lifeStatus = .alive
+        } else if let child = children.singleOrNil(), allowFlatten {
             child.unbindFromParent()
             let mru = parent?.mostRecentChild
-            let previousBinding = unbindFromParent()
+            let previousBinding = unbindFromParent() // Kill the current node
             child.bind(to: previousBinding.parent, adaptiveWeight: previousBinding.adaptiveWeight, index: previousBinding.index)
-            (child as? TilingContainer)?.unbindEmptyAndAutoFlatten(allowFlatten: allowFlatten)
+            (child as? TilingContainer)?.unbindEmptyAndFlattenContainersRecursive(allowFlatten: allowFlatten)
             if mru != self {
                 mru?.markAsMostRecentChild()
             } else {
                 child.markAsMostRecentChild()
             }
         } else {
+            var inhabitedChildrenCount = 0
             for child in children {
-                (child as? TilingContainer)?.unbindEmptyAndAutoFlatten(allowFlatten: allowFlatten)
+                (child as? TilingContainer)?.unbindEmptyAndFlattenContainersRecursive(allowFlatten: allowFlatten)
+                inhabitedChildrenCount += child.tilingTreeNodeCasesOrDie().isInhabited ? 1 : 0
             }
-            if children.isEmpty && !isRootContainer {
+            if children.isEmpty {
                 unbindFromParent()
+            }
+            if inhabitedChildrenCount == 1 && allowFlatten {
+                lifeStatus = .mustBeFlattened
+            } else {
+                lifeStatus = inhabitedChildrenCount > 0 ? .alive : .deadOrInvisible
             }
         }
     }

@@ -1,6 +1,6 @@
 @testable import AppBundle
 import Common
-import XCTest
+import Testing
 
 /// Covers the pure parse-feedback logic behind the settings window's three raw-TOML
 /// panes (Keybindings, Window rules, Callbacks).
@@ -16,26 +16,27 @@ import XCTest
 /// real custom notation is accepted once the matching override is in the preamble, and
 /// that genuine garbage still fails.
 @MainActor
-final class SettingsRawSectionTest: XCTestCase {
-    func testCustomNotationWithoutPreambleFalselyFailsToParse() {
+@Suite(.serializedGlobally)
+struct SettingsRawSectionTest {
+    @Test func testCustomNotationWithoutPreambleFalselyFailsToParse() {
         // "zz" isn't a notation any preset knows about on its own.
         let text = "[mode.main.binding]\nalt-zz = 'focus left'\n"
         assertFail(parseRawSectionFragment(preamble: "", text: text))
     }
 
-    func testCustomNotationWithMatchingOverrideInPreambleParses() {
+    @Test func testCustomNotationWithMatchingOverrideInPreambleParses() {
         let text = "[mode.main.binding]\nalt-zz = 'focus left'\n"
         let preamble = keybindingsPreamble(preset: .qwerty, notationOverrides: ["zz": "a"])
         assertSucc(parseRawSectionFragment(preamble: preamble, text: text))
     }
 
-    func testGenuineGarbageStillFailsWithPreamble() {
+    @Test func testGenuineGarbageStillFailsWithPreamble() {
         let text = "[mode.main.binding]\nalt-h = 'no-such-command'\n"
         let preamble = keybindingsPreamble(preset: .dvorak, notationOverrides: [:])
         assertFail(parseRawSectionFragment(preamble: preamble, text: text))
     }
 
-    func testWindowRulesFragmentIsSelfContained() {
+    @Test func testWindowRulesFragmentIsSelfContained() {
         let text = """
             [[on-window-detected]]
             if.app-id = 'com.apple.finder'
@@ -44,23 +45,23 @@ final class SettingsRawSectionTest: XCTestCase {
         assertSucc(parseRawSectionFragment(preamble: "", text: text))
     }
 
-    func testCallbacksFragmentIsSelfContained() {
+    @Test func testCallbacksFragmentIsSelfContained() {
         let text = "after-startup-command = 'workspace 1'\n"
         assertSucc(parseRawSectionFragment(preamble: "", text: text))
     }
 
-    func testKeybindingsPreambleSpellsPresetAsTomlLiteralString() {
+    @Test func testKeybindingsPreambleSpellsPresetAsTomlLiteralString() {
         assertEquals(keybindingsPreamble(preset: .colemak, notationOverrides: [:]), "[key-mapping]\npreset = 'colemak'\n")
     }
 
-    func testKeybindingsPreambleIncludesNotationOverridesTable() {
+    @Test func testKeybindingsPreambleIncludesNotationOverridesTable() {
         assertEquals(
             keybindingsPreamble(preset: .qwerty, notationOverrides: ["zz": "a"]),
             "[key-mapping]\npreset = 'qwerty'\n\n[key-mapping.key-notation-to-key-code]\nzz = 'a'\n",
         )
     }
 
-    func testKeybindingsPreambleQuotesANotationThatIsNotABareTomlKey() {
+    @Test func testKeybindingsPreambleQuotesANotationThatIsNotABareTomlKey() {
         // A dot is valid in AeroSpace notation (only whitespace and `-` are forbidden),
         // It is TOML-significant in both tables, so a valid config quotes the mapping and
         // binding keys. The preamble must preserve that mapping spelling.

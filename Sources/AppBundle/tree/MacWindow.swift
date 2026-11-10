@@ -4,20 +4,26 @@ import Common
 final class MacWindow: Window {
     let macApp: MacApp
     private var prevUnhiddenProportionalPositionInsideWorkspaceRect: CGPoint?
-    var isSticky: Bool = false
+    var isSticky: Bool = false // fork: `layout sticky` (floating windows that follow the visible workspace of their monitor)
 
-    @MainActor
-    private init(_ id: UInt32, _ actor: MacApp, lastFloatingSize: CGSize?, parent: NonLeafTreeNodeObject, adaptiveWeight: CGFloat, index: Int) {
+    @MainActor private init(
+        _ id: OpaqueWindowId,
+        _ actor: MacApp,
+        lastFloatingSize: CGSize?,
+        parent: NonLeafTreeNodeObject,
+        adaptiveWeight: CGFloat,
+        index: Int,
+    ) {
         self.macApp = actor
         super.init(id: id, actor, lastFloatingSize: lastFloatingSize, parent: parent, adaptiveWeight: adaptiveWeight, index: index)
     }
 
-    @MainActor static var allWindowsMap: [UInt32: MacWindow] = [:]
+    @MainActor static var allWindowsMap: [OpaqueWindowId: MacWindow] = [:]
     @MainActor static var allWindows: [MacWindow] { Array(allWindowsMap.values) }
 
     /// The AX reads `getOrRegister` needs before it can bind a not-yet-known window into the tree.
     /// They touch nothing but the window itself, which is what lets `prefetchAxSnapshots` issue them
-    /// for many windows concurrently ahead of the serial registration loop.
+    /// for many windows concurrently ahead of the serial registration loop. (fork 62e757a1)
     struct AxSnapshot: Sendable {
         let rect: Rect?
         let windowType: AxUiElementWindowType
@@ -26,22 +32,22 @@ final class MacWindow: Window {
     /// Read the per-window AX data for every window in `mapping` that isn't registered yet. One task
     /// per window, but the parallelism that matters is across apps: each MacApp serves its reads from
     /// its own AX thread, so the round-trips of different apps overlap instead of being serialized by
-    /// the caller's `await`.
+    /// the caller's `await`. (fork 62e757a1)
     @MainActor
-    static func prefetchAxSnapshots(_ mapping: [MacApp: [UInt32]]) async throws -> [UInt32: AxSnapshot] {
-        try await withThrowingTaskGroup(of: (UInt32, AxSnapshot).self, returning: [UInt32: AxSnapshot].self) { group in
+    static func prefetchAxSnapshots(_ mapping: [MacApp: [OpaqueWindowId: WindowLifeStatus]]) async throws -> [OpaqueWindowId: AxSnapshot] {
+        try await withThrowingTaskGroup(of: (OpaqueWindowId, AxSnapshot).self, returning: [OpaqueWindowId: AxSnapshot].self) { group in
             for (app, windowIds) in mapping {
-                for windowId in windowIds where allWindowsMap[windowId] == nil {
+                for windowId in windowIds.keys where allWindowsMap[windowId] == nil {
                     try checkCancellation()
-                    let windowLevel = getWindowLevel(for: windowId)
                     group.addTask { @Sendable @MainActor in
-                        let rect = try await app.getAxRect(windowId)
-                        let windowType = try await app.getAxUiElementWindowType(windowId, windowLevel)
+                        let rect = try await app.getAxRect(windowId, .cancellable)
+                        let windowLevel = try await app.getWindowLevel(windowId, .cancellable)
+                        let windowType = try await app.getAxUiElementWindowType(windowId, windowLevel, .cancellable)
                         return (windowId, AxSnapshot(rect: rect, windowType: windowType))
                     }
                 }
             }
-            var result: [UInt32: AxSnapshot] = [:]
+            var result: [OpaqueWindowId: AxSnapshot] = [:]
             for try await (windowId, snapshot) in group {
                 result[windowId] = snapshot
             }
@@ -51,49 +57,34 @@ final class MacWindow: Window {
 
     @MainActor
     @discardableResult
-    static func getOrRegister(
-        windowId: UInt32,
-        macApp: MacApp,
-        replacingNativeTabWindowId: UInt32? = nil,
-        snapshot: AxSnapshot? = nil,
-    ) async throws -> MacWindow {
-        if let existing = existingWindowDiscardingStaleReplacement(windowId: windowId, macApp: macApp, replacingNativeTabWindowId: replacingNativeTabWindowId) {
-            return existing
-        }
+    static func getOrRegister(windowId: OpaqueWindowId, macApp: MacApp, snapshot: AxSnapshot? = nil) async throws -> MacWindow {
+        if let existing = allWindowsMap[windowId] { return existing }
         let rect: Rect? = if let snapshot {
             snapshot.rect
         } else {
-            try await macApp.getAxRect(windowId)
-        }
-        if let replacement = try await replacementWindowIfApplicable(windowId: windowId, macApp: macApp, rect: rect, staleWindowId: replacingNativeTabWindowId) {
-            return replacement
+            try await macApp.getAxRect(windowId, .cancellable)
         }
         let data = try await unbindAndGetBindingDataForNewWindow(
             windowId,
             macApp,
             isStartup
-                ? (rect?.center.monitorApproximation ?? mainMonitor).activeWorkspace
-                : focus.workspace,
+                ? (rect?.center.monitorApproximation ?? mainMonitorInfo).visibleWorkspace
+                : globalFocus.workspace,
             window: nil,
+            .cancellable,
             windowType: snapshot?.windowType,
         )
 
         // atomic synchronous section
-        if let existing = existingWindowDiscardingStaleReplacement(windowId: windowId, macApp: macApp, replacingNativeTabWindowId: replacingNativeTabWindowId) {
-            return existing
-        }
-        if let replacement = try await replacementWindowIfApplicable(windowId: windowId, macApp: macApp, rect: rect, staleWindowId: replacingNativeTabWindowId) {
-            return replacement
-        }
+        if let existing = allWindowsMap[windowId] { return existing }
         let window = MacWindow(windowId, macApp, lastFloatingSize: rect?.size, parent: data.parent, adaptiveWeight: data.adaptiveWeight, index: data.index)
         window.isAwaitingOnWindowDetected = true
         allWindowsMap[windowId] = window
-        discardNativeTabWindow(replacingNativeTabWindowId, from: macApp)
 
-        try await debugWindowsIfRecording(window)
+        try await debugWindowsIfRecording(window, .cancellable)
         defer { window.isAwaitingOnWindowDetected = false }
         if try await !restoreClosedWindowsCacheIfNeeded(newlyDetectedWindow: window) {
-            try await tryOnWindowDetected(window)
+            await runOnWindowDetected(ifConventional: window)
         }
         window.preventNewWindowFlickerIfNeeded()
         return window
@@ -107,7 +98,7 @@ final class MacWindow: Window {
     func preventNewWindowFlickerIfNeeded() {
         guard config.newWindowPreventFlicker else { return }
         guard !isStartup else { return } // On startup everything is laid out at once; no per-window flash to hide
-        guard let nodeMonitor, let workspace = nodeWorkspace, workspace.isVisible else { return }
+        guard let nodeMonitorInfo, let workspace = nodeWorkspace, workspace.isVisible else { return }
         // Only tiling windows flash at a wrong spot; floating windows keep their native position on purpose.
         guard parent is TilingContainer else { return }
         if isHiddenInCorner { return }
@@ -116,62 +107,8 @@ final class MacWindow: Window {
         prevUnhiddenProportionalPositionInsideWorkspaceRect = .zero
         // Single non-blocking AX move to the bottom-right corner, mirroring hideInCorner's offscreen target.
         let s = lastFloatingSize ?? .zero
-        let corner = nodeMonitor.visibleRect.bottomRightCorner + CGPoint(x: 1, y: 1) - CGPoint(x: s.width, y: 0)
+        let corner = nodeMonitorInfo.visibleRect.bottomRightCorner + CGPoint(x: 1, y: 1) - CGPoint(x: s.width, y: 0)
         setAxFrame(corner, nil)
-    }
-
-    // A replacement tab is the same logical window as the one it replaces, just under a new AX
-    // window id, so it's spliced into the exact tree slot (parent, index, weight, floating size,
-    // fullscreen state, cached layout geometry) the old one occupied, instead of going through
-    // on-window-detected / MRU placement as if it were a newly opened window.
-    @MainActor
-    private static func registerNativeTabReplacement(windowId: UInt32, macApp: MacApp, rect: Rect?, staleWindowId: UInt32?) -> MacWindow? {
-        guard let staleWindowId, let oldWindow = allWindowsMap[staleWindowId], oldWindow.macApp === macApp,
-              let (_, bindingData) = takeNativeTabReplacementBinding(from: oldWindow)
-        else {
-            return nil
-        }
-        allWindowsMap.removeValue(forKey: oldWindow.windowId)
-
-        let window = MacWindow(
-            windowId,
-            macApp,
-            lastFloatingSize: oldWindow.lastFloatingSize ?? rect?.size,
-            parent: bindingData.parent,
-            adaptiveWeight: bindingData.adaptiveWeight,
-            index: bindingData.index,
-        )
-        window.isFullscreen = oldWindow.isFullscreen
-        window.noOuterGapsInFullscreen = oldWindow.noOuterGapsInFullscreen
-        window.layoutReason = oldWindow.layoutReason
-        window.lastAppliedLayoutVirtualRect = oldWindow.lastAppliedLayoutVirtualRect
-        window.lastAppliedLayoutPhysicalRect = oldWindow.lastAppliedLayoutPhysicalRect
-        window.prevUnhiddenProportionalPositionInsideWorkspaceRect = oldWindow.prevUnhiddenProportionalPositionInsideWorkspaceRect
-        allWindowsMap[windowId] = window
-        return window
-    }
-
-    @MainActor
-    private static func discardNativeTabWindow(_ windowId: UInt32?, from macApp: MacApp) {
-        guard let windowId, let window = allWindowsMap[windowId], window.macApp === macApp else { return }
-        allWindowsMap.removeValue(forKey: windowId)
-        if window.isBound {
-            window.unbindFromParent()
-        }
-    }
-
-    @MainActor
-    private static func existingWindowDiscardingStaleReplacement(windowId: UInt32, macApp: MacApp, replacingNativeTabWindowId: UInt32?) -> MacWindow? {
-        guard let existing = allWindowsMap[windowId] else { return nil }
-        discardNativeTabWindow(replacingNativeTabWindowId, from: macApp)
-        return existing
-    }
-
-    @MainActor
-    private static func replacementWindowIfApplicable(windowId: UInt32, macApp: MacApp, rect: Rect?, staleWindowId: UInt32?) async throws -> MacWindow? {
-        guard let replacement = registerNativeTabReplacement(windowId: windowId, macApp: macApp, rect: rect, staleWindowId: staleWindowId) else { return nil }
-        try await debugWindowsIfRecording(replacement)
-        return replacement
     }
 
     // var description: String {
@@ -186,16 +123,20 @@ final class MacWindow: Window {
     //     return "Window(\(description))"
     // }
 
-    func isWindowHeuristic(_ windowLevel: MacOsWindowLevel?) async throws -> Bool { // todo cache
-        try await macApp.isWindowHeuristic(windowId, windowLevel)
+    func isWindowHeuristic(_ windowLevel: MacOsWindowLevel?, _ cm: CancellationMode) async throws -> Bool { // todo cache
+        try await macApp.isWindowHeuristic(windowId, windowLevel, cm)
     }
 
-    func isDialogHeuristic(_ windowLevel: MacOsWindowLevel?) async throws -> Bool { // todo cache
-        try await macApp.isDialogHeuristic(windowId, windowLevel)
+    func isDialogHeuristic(_ windowLevel: MacOsWindowLevel?, _ cm: CancellationMode) async throws -> Bool { // todo cache
+        try await macApp.isDialogHeuristic(windowId, windowLevel, cm)
     }
 
-    func dumpAxInfo() async throws -> [String: Json] {
-        try await macApp.dumpWindowAxInfo(windowId: windowId)
+    func dumpAxInfo(_ cm: CancellationMode) async throws -> [String: Json] {
+        try await macApp.dumpWindowAxInfo(windowId: windowId, cm)
+    }
+
+    @MainActor func getWindowLevel(_ cm: CancellationMode) async throws -> MacOsWindowLevel? {
+        try await macApp.getWindowLevel(windowId, cm)
     }
 
     func setNativeFullscreen(_ value: Bool) {
@@ -217,13 +158,13 @@ final class MacWindow: Window {
         let parent = unbindFromParent().parent
         let deadWindowWorkspace = parent.nodeWorkspace
         broadcastEvent(.windowClosed(windowId: windowId, workspace: deadWindowWorkspace?.name))
-        let focus = focus
+        let focus = globalFocus
         if let deadWindowWorkspace, deadWindowWorkspace == focus.workspace ||
             deadWindowWorkspace == prevFocusedWorkspace && prevFocusedWorkspaceDate.distance(to: .now) < 1
         {
             protectFocusAfterWindowClose(workspaceName: deadWindowWorkspace.name)
             switch parent.cases {
-                case .tilingContainer, .workspace, .macosHiddenAppsWindowsContainer, .macosFullscreenWindowsContainer:
+                case .tilingContainer, .floatingWindowsContainer, .macosHiddenAppsWindowsContainer, .macosFullscreenWindowsContainer:
                     let deadWindowFocus = deadWindowWorkspace.toLiveFocus()
                     _ = setFocus(to: deadWindowFocus)
                     // Guard against "Apple Reminders popup" bug: https://github.com/nikitabobko/AeroSpace/issues/201
@@ -232,22 +173,25 @@ final class MacWindow: Window {
                         //   https://github.com/nikitabobko/AeroSpace/issues/65
                         deadWindowFocus.windowOrNil?.nativeFocus()
                     }
-                case .macosPopupWindowsContainer, .macosMinimizedWindowsContainer:
-                    break // Don't switch back on popup destruction
+                case .macosPopupWindowsContainer, // Don't switch back on popup destruction
+                     .workspace, // Workspace is invalid parent for windows
+                     .monitor, // Monitor is invalid parent for windows
+                     .workspacesContainer, // WorkspacesContainer is invalid parent for windows
+                     .macosMinimizedWindowsContainer: // Don't switch back on minimized windows destruction
+                    break
             }
         }
     }
 
-    @MainActor override var title: String { get async throws { try await macApp.getAxTitle(windowId) ?? "" } }
-    @MainActor override var isMacosFullscreen: Bool { get async throws { try await macApp.isMacosNativeFullscreen(windowId) == true } }
-    @MainActor override var isMacosMinimized: Bool { get async throws { try await macApp.isMacosNativeMinimized(windowId) == true } }
-    /// Both native states in a single AX hop
-    @MainActor override var macosWindowNativeState: MacosWindowNativeState {
-        get async throws { try await macApp.getMacosWindowNativeState(windowId) ?? .normal }
+    override func getTitle(_ cm: CancellationMode) async throws -> String { try await macApp.getAxTitle(windowId, cm) ?? "" }
+
+    override func isMacosFullscreen(_ cm: CancellationMode) async throws -> Bool { try await macApp.isMacosNativeFullscreen(windowId, cm) == true }
+    override func isMacosMinimized(_ cm: CancellationMode) async throws -> Bool { try await macApp.isMacosNativeMinimized(windowId, cm) == true }
+    override func getMacosWindowNativeState(_ cm: CancellationMode) async throws -> MacosWindowNativeState {
+        try await macApp.getMacosWindowNativeState(windowId, cm) ?? .normal
     }
 
-    @MainActor
-    override func nativeFocus() {
+    @MainActor override func nativeFocus() {
         macApp.nativeFocus(windowId)
     }
 
@@ -256,7 +200,7 @@ final class MacWindow: Window {
         macApp.closeAndUnregisterAxWindow(windowId)
     }
 
-    /// Save the current window position so it can be restored later by unhideFromCorner.
+    /// Save the current window position so it can be restored later by unhideFromCorner. (fork fd172393)
     /// Returns false when current AX/screen state is unsafe, so caller must not move the window to a hide corner.
     @MainActor
     @discardableResult
@@ -268,14 +212,14 @@ final class MacWindow: Window {
         // position away unread. Skip the blocking AX rect round-trip and store only the sentinel that
         // marks the window as hidden - the same trick preventNewWindowFlickerIfNeeded uses. That's one
         // saved round-trip per tiled window on every non-visible workspace, at startup and on every
-        // workspace switch.
+        // workspace switch. (fork 62e757a1)
         if case .tiling = getChildParentRelation(child: self, parent: parent) {
             prevUnhiddenProportionalPositionInsideWorkspaceRect = .zero
             return true
         }
-        let workspaceRect = workspace.workspaceMonitor.rect
-        let visibleRect = workspace.workspaceMonitor.visibleRect
-        guard let windowRect = try await getAxRect() else { return false }
+        let workspaceRect = workspace.workspaceMonitorInfo.rect
+        let visibleRect = workspace.workspaceMonitorInfo.visibleRect
+        guard let windowRect = try await getAxRect(.cancellable) else { return false }
         // Check again after the suspension point above. Another hideInCorner/unhideFromCorner
         // cycle may have already saved the correct position while this AX read was awaiting.
         guard !screenSleepWakeInProgress else { return false }
@@ -290,7 +234,7 @@ final class MacWindow: Window {
         // unhideFromCorner clamps the restored position against a stale size written only at
         // detection / 'layout floating', nudging user-resized floating windows off the
         // right/bottom edges. Guarded by isFloating so a corner-parked tiled window can't pollute
-        // the size that 'layout floating' restores.
+        // the size that 'layout floating' restores. (upstream 649301b2)
         if isFloating {
             lastFloatingSize = windowRect.size
         }
@@ -319,28 +263,28 @@ final class MacWindow: Window {
     @MainActor
     func hideInCorner(_ corner: OptimalHideCorner) async throws {
         guard !screenSleepWakeInProgress else { return }
-        guard let nodeMonitor else { return }
+        guard let nodeMonitorInfo else { return }
         // Don't move a floating window to a hide corner unless we know how to restore it.
         guard try await saveFloatingPositionIfNeeded() else { return }
         guard !screenSleepWakeInProgress else { return }
         let p: CGPoint
         switch corner {
             case .bottomLeftCorner:
-                guard let s = try await getAxSize() else { fallthrough }
+                guard let s = try await getAxSize(.cancellable) else { fallthrough }
                 // Zoom will jump off if you do one pixel offset https://github.com/nikitabobko/AeroSpace/issues/527
                 // todo this ad hoc won't be necessary once I implement optimization suggested by Zalim
                 let onePixelOffset = macApp.appId == .zoom ? .zero : CGPoint(x: 1, y: -1)
-                p = nodeMonitor.visibleRect.bottomLeftCorner + onePixelOffset + CGPoint(x: -s.width, y: 0)
+                p = nodeMonitorInfo.visibleRect.bottomLeftCorner + onePixelOffset + CGPoint(x: -s.width, y: 0)
             case .bottomRightCorner:
                 // Zoom will jump off if you do one pixel offset https://github.com/nikitabobko/AeroSpace/issues/527
                 // todo this ad hoc won't be necessary once I implement optimization suggested by Zalim
                 let onePixelOffset = macApp.appId == .zoom ? .zero : CGPoint(x: 1, y: 1)
-                p = nodeMonitor.visibleRect.bottomRightCorner - onePixelOffset
+                p = nodeMonitorInfo.visibleRect.bottomRightCorner - onePixelOffset
         }
         // The window is being moved away from whatever layoutRecursive last applied to it, so that record is now
         // stale. Without invalidating it, layoutRecursive's redundant-write skip would wrongly think the window
         // is still at its correct tiled position on the next relayout (since the computed target rect is
-        // unchanged) and skip re-applying it, leaving tiling windows stuck hidden in the corner.
+        // unchanged) and skip re-applying it, leaving tiling windows stuck hidden in the corner. (fork #90)
         lastAppliedLayoutPhysicalRect = nil
         setAxFrame(p, nil)
     }
@@ -355,7 +299,7 @@ final class MacWindow: Window {
             // Just a small optimization to avoid unnecessary AX calls for non floating windows
             // Tiling windows should be unhidden with layoutRecursive anyway
             case .floatingWindow:
-                let workspaceRect = nodeWorkspace.workspaceMonitor.rect
+                let workspaceRect = nodeWorkspace.workspaceMonitorInfo.rect
                 var newX = workspaceRect.topLeftX + workspaceRect.width * prevUnhiddenProportionalPositionInsideWorkspaceRect.x
                 var newY = workspaceRect.topLeftY + workspaceRect.height * prevUnhiddenProportionalPositionInsideWorkspaceRect.y
                 // todo we probably should replace lastFloatingSize with proper floating window sizing
@@ -372,8 +316,8 @@ final class MacWindow: Window {
                 self.prevUnhiddenProportionalPositionInsideWorkspaceRect = nil
             case .macosNativeFullscreenWindow, .macosNativeHiddenAppWindow, .macosNativeMinimizedWindow,
                  .macosPopupWindow, .shimContainerRelation:
-                // Preserve saved position — window is in a temporary macOS state and will
-                // need the position when it returns to floating.
+                // Preserve saved position - window is in a temporary macOS state and will
+                // need the position when it returns to floating. (fork fd172393)
                 break
         }
     }
@@ -382,31 +326,25 @@ final class MacWindow: Window {
         prevUnhiddenProportionalPositionInsideWorkspaceRect != nil
     }
 
-    override func getAxSize() async throws -> CGSize? {
-        try await macApp.getAxSize(windowId)
+    override func getAxSize(_ cm: CancellationMode) async throws -> CGSize? {
+        try await macApp.getAxSize(windowId, cm)
     }
 
     override func setAxFrame(_ topLeft: CGPoint?, _ size: CGSize?) {
         macApp.setAxFrame(windowId, topLeft, size)
     }
 
-    override func getAxRect() async throws -> Rect? {
-        try await macApp.getAxRect(windowId)
+    override func getAxRect(_ cm: CancellationMode) async throws -> Rect? {
+        try await macApp.getAxRect(windowId, cm)
     }
-}
-
-@MainActor
-func takeNativeTabReplacementBinding(from staleWindow: Window?) -> (window: Window, bindingData: BindingData)? {
-    guard let staleWindow, staleWindow.isBound else { return nil }
-    return (staleWindow, staleWindow.unbindFromParent())
 }
 
 extension Window {
     @MainActor
-    func relayoutWindow(on workspace: Workspace, forceTile: Bool = false) async throws {
+    func relayoutWindow(on workspace: Workspace, _ cm: CancellationMode, forceTile: Bool = false) async throws {
         let data = forceTile
             ? unbindAndGetBindingDataForNewTilingWindow(workspace, window: self)
-            : try await unbindAndGetBindingDataForNewWindow(self.asMacWindow().windowId, self.asMacWindow().macApp, workspace, window: self)
+            : try await unbindAndGetBindingDataForNewWindow(self.asMacWindow().windowId, self.asMacWindow().macApp, workspace, window: self, cm)
         bind(to: data.parent, adaptiveWeight: data.adaptiveWeight, index: data.index)
     }
 }
@@ -414,20 +352,21 @@ extension Window {
 // The function is private because it's unsafe. It leaves the window in unbound state
 @MainActor
 private func unbindAndGetBindingDataForNewWindow(
-    _ windowId: UInt32,
+    _ windowId: OpaqueWindowId,
     _ macApp: MacApp,
     _ workspace: Workspace,
     window: Window?,
+    _ cm: CancellationMode,
     windowType: AxUiElementWindowType? = nil,
 ) async throws -> BindingData {
     let resolvedWindowType: AxUiElementWindowType = if let windowType {
         windowType // Already read by MacWindow.prefetchAxSnapshots
     } else {
-        try await macApp.getAxUiElementWindowType(windowId, getWindowLevel(for: windowId))
+        try await macApp.getAxUiElementWindowType(windowId, macApp.getWindowLevel(windowId, cm), cm)
     }
     return switch resolvedWindowType {
         case .popup: BindingData(parent: macosPopupWindowsContainer, adaptiveWeight: WEIGHT_AUTO, index: INDEX_BIND_LAST)
-        case .dialog: BindingData(parent: workspace, adaptiveWeight: WEIGHT_AUTO, index: INDEX_BIND_LAST)
+        case .dialog: BindingData(parent: workspace.floatingWindowsContainer, adaptiveWeight: WEIGHT_AUTO, index: INDEX_BIND_LAST)
         case .window: unbindAndGetBindingDataForNewTilingWindow(workspace, window: window)
     }
 }
@@ -436,13 +375,8 @@ private func unbindAndGetBindingDataForNewWindow(
 @MainActor
 private func unbindAndGetBindingDataForNewTilingWindow(_ workspace: Workspace, window: Window?) -> BindingData {
     window?.unbindFromParent() // It's important to unbind to get correct data from below
-    let mruWindow = workspace.mostRecentWindowRecursive
-    if let mruWindow, let tilingParent = mruWindow.parent as? TilingContainer {
-        return BindingData(
-            parent: tilingParent,
-            adaptiveWeight: WEIGHT_AUTO,
-            index: mruWindow.ownIndex.orDie() + 1,
-        )
+    if let (tilingParent, index) = workspace.mostRecentWindowRecursive?.nearestAliveTilingParent() {
+        return BindingData(parent: tilingParent, adaptiveWeight: WEIGHT_AUTO, index: index + 1)
     } else {
         return BindingData(
             parent: workspace.rootTilingContainer,
@@ -453,75 +387,72 @@ private func unbindAndGetBindingDataForNewTilingWindow(_ workspace: Workspace, w
 }
 
 @MainActor
-func tryOnWindowDetected(_ window: Window) async throws {
-    guard let parent = window.parent else { return }
-    switch parent.cases {
-        case .tilingContainer, .workspace, .macosMinimizedWindowsContainer,
+func runOnWindowDetected(ifConventional window: Window) async {
+    switch window.windowParentCases {
+        case .tilingContainer, .floatingWindowsContainer, .macosMinimizedWindowsContainer,
              .macosFullscreenWindowsContainer, .macosHiddenAppsWindowsContainer:
-            // `layout --for-next-detected-window`: applied once, both before the callbacks (so they observe it) and
-            // after them (so it wins over them)
-            let layout = layoutForNextDetectedWindow
-            layoutForNextDetectedWindow = nil
-            guard let layout else {
-                try await onWindowDetected(window)
-                return
+            let layout = global_layoutForNextDetectedWindow
+            global_layoutForNextDetectedWindow = nil
+            defer {
+                if let layout {
+                    await LayoutCommand(args: LayoutCmdArgs(rawArgs: [], toggleBetween: [layout]))
+                        .run(.defaultEnv.withWindowId(window.windowId), .emptyStdin)
+                }
             }
-            try await applyScheduledLayout(layout, to: window)
-            do {
-                try await onWindowDetected(window)
-            } catch {
-                try await applyScheduledLayout(layout, to: window)
-                throw error
+            if let layout {
+                await LayoutCommand(args: LayoutCmdArgs(rawArgs: [], toggleBetween: [layout]))
+                    .run(.defaultEnv.withWindowId(window.windowId), .emptyStdin)
             }
-            try await applyScheduledLayout(layout, to: window)
-        case .macosPopupWindowsContainer:
+            _ = await onWindowDetected(.defaultEnv, CmdIoImpl.emptyStdinIgnoringOut, window)
+        case .macosPopupWindowsContainer, nil:
             break
     }
 }
 
 @MainActor
-private func applyScheduledLayout(_ layout: LayoutCmdArgs.LayoutDescription, to window: Window) async throws {
-    try await LayoutCommand(args: LayoutCmdArgs(rawArgs: [], toggleBetween: [layout]))
-        .run(.defaultEnv.copy(\.windowId, window.windowId), .emptyStdin)
-}
-
-@MainActor
-private func onWindowDetected(_ window: Window) async throws {
+func onWindowDetected(_ env: CmdEnv, _ io: CmdIo, _ window: Window) async -> Int32ExitCode {
     broadcastEvent(.windowDetected(
         windowId: window.windowId,
         workspace: window.nodeWorkspace?.name,
         appBundleId: window.app.rawAppBundleId,
         appName: window.app.name,
     ))
-    for callback in config.onWindowDetected where try await callback.matches(window) {
-        _ = try await callback.run.runCmdSeq(.defaultEnv.copy(\.windowId, window.windowId), .emptyStdin)
+    var lastExitCode = Int32ExitCode.succ
+    for callback in config.onWindowDetected where await callback.matches(window) {
+        lastExitCode = await callback.run.run(env.withWindowId(window.windowId), io)
         if !callback.checkFurtherCallbacks {
-            return
+            return lastExitCode
         }
     }
+    return lastExitCode
 }
 
 extension WindowDetectedCallback {
     @MainActor
-    func matches(_ window: Window) async throws -> Bool {
-        if let startupMatcher = matcher.duringAeroSpaceStartup, startupMatcher != isStartup {
-            return false
+    func matches(_ window: Window) async -> Bool {
+        switch self.matcher {
+            case .legacy(let matcher):
+                if let startupMatcher = matcher.duringAeroSpaceStartup, startupMatcher != isStartup {
+                    return false
+                }
+                if let regex = matcher.windowTitleRegexSubstring, (try? await window.getTitle(.nonCancellable))?.contains(caseInsensitiveRegex: regex) != true {
+                    return false
+                }
+                if let appIds = matcher.appIds, !appIds.contains(window.app.rawAppBundleId ?? "") {
+                    return false
+                }
+                if let regex = matcher.appIdRegexSubstring, !(window.app.rawAppBundleId ?? "").contains(caseInsensitiveRegex: regex) {
+                    return false
+                }
+                if let regex = matcher.appNameRegexSubstring, !(window.app.name ?? "").contains(caseInsensitiveRegex: regex) {
+                    return false
+                }
+                if let workspace = matcher.workspace, workspace != window.nodeWorkspace?.name {
+                    return false
+                }
+                return true
+            case .command(let command):
+                return await command.run(.defaultEnv.withWindowId(window.windowId), .emptyStdin).exitCode.rawValue == 0
         }
-        if let regex = matcher.windowTitleRegexSubstring, !(try await window.title).contains(caseInsensitiveRegex: regex) {
-            return false
-        }
-        if let appIds = matcher.appIds, !appIds.contains(window.app.rawAppBundleId ?? "") {
-            return false
-        }
-        if let regex = matcher.appIdRegexSubstring, !(window.app.rawAppBundleId ?? "").contains(caseInsensitiveRegex: regex) {
-            return false
-        }
-        if let regex = matcher.appNameRegexSubstring, !(window.app.name ?? "").contains(caseInsensitiveRegex: regex) {
-            return false
-        }
-        if let workspace = matcher.workspace, workspace != window.nodeWorkspace?.name {
-            return false
-        }
-        return true
     }
 }

@@ -1,3 +1,4 @@
+// todo try to simplify these types
 public protocol ExitCode: RawRepresentable<Int32>, AeroAny, Sendable {
     static var fail: Self { get }
 }
@@ -13,6 +14,7 @@ public struct Int32ExitCode: ExitCode, Equatable {
     public var rawValue: Int32
     public init(rawValue: Int32) { self.rawValue = rawValue }
     public static let fail = Int32ExitCode(rawValue: EXIT_CODE_TWO)
+    public static let succ = Int32ExitCode(rawValue: EXIT_CODE_TWO)
 }
 
 public enum BinaryExitCode: Int32, ExitCode {

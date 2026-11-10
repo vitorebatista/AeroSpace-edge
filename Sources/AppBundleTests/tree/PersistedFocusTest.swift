@@ -1,26 +1,23 @@
 @testable import AppBundle
 import Foundation
-import XCTest
+import Testing
 
 @MainActor
-final class PersistedFocusTest: XCTestCase {
-    override func setUp() async throws {
+@Suite(.serializedGlobally)
+struct PersistedFocusTest {
+    init() {
         setUpWorkspacesForTests()
         UserDefaults.standard.removeObject(forKey: focusedWorkspaceDefaultsKey)
     }
 
-    override func tearDown() async throws {
-        UserDefaults.standard.removeObject(forKey: focusedWorkspaceDefaultsKey)
-    }
-
-    func testFocusedWorkspaceIsStoredImmediately() {
+    @Test func testFocusedWorkspaceIsStoredImmediately() {
         let workspace = Workspace.get(byName: "1")
         assertEquals(workspace.focusWorkspace(), true)
 
         assertEquals(storedFocusedWorkspace(), "1")
     }
 
-    func testRefocusingTheSameWorkspaceDoesNotRewriteTheStore() {
+    @Test func testRefocusingTheSameWorkspaceDoesNotRewriteTheStore() {
         assertEquals(Workspace.get(byName: "1").focusWorkspace(), true)
         storeFocusedWorkspace("stale-marker")
 
@@ -28,34 +25,34 @@ final class PersistedFocusTest: XCTestCase {
         assertEquals(storedFocusedWorkspace(), "stale-marker")
     }
 
-    func testTheWorkspaceYouLeftOffOnIsRestored() {
+    @Test func testTheWorkspaceYouLeftOffOnIsRestored() {
         assertEquals(workspaceToFocusAtStartup(persisted: "4", existing: ["1", "2", "4"]), "4")
     }
 
-    func testImmediatelyRememberedWorkspaceWinsOverOlderLayoutSnapshot() {
+    @Test func testImmediatelyRememberedWorkspaceWinsOverOlderLayoutSnapshot() {
         assertEquals(workspaceToFocusAtStartup(remembered: "1", persisted: "4", existing: ["1", "4"]), "1")
     }
 
-    func testNothingPersistedKeepsWhateverStartupChose() {
+    @Test func testNothingPersistedKeepsWhateverStartupChose() {
         assertEquals(workspaceToFocusAtStartup(persisted: nil, existing: ["1", "2"]), nil)
         assertEquals(workspaceToFocusAtStartup(remembered: nil, persisted: nil, existing: ["1", "2"]), nil)
     }
 
     /// The config may have dropped the workspace between runs. Focusing it by name would create it,
     /// so a restart would resurrect a workspace the user deleted.
-    func testAWorkspaceThatNoLongerExistsIsNotResurrected() {
+    @Test func testAWorkspaceThatNoLongerExistsIsNotResurrected() {
         assertEquals(workspaceToFocusAtStartup(persisted: "gone", existing: ["1", "2"]), nil)
         assertEquals(workspaceToFocusAtStartup(remembered: "gone", persisted: nil, existing: ["1", "2"]), nil)
     }
 
-    func testInvalidRememberedWorkspaceFallsBackToLayoutSnapshot() {
+    @Test func testInvalidRememberedWorkspaceFallsBackToLayoutSnapshot() {
         assertEquals(workspaceToFocusAtStartup(remembered: "gone", persisted: "4", existing: ["1", "4"]), "4")
     }
 
     /// On `config-version = 2` a workspace named only by a binding is not a live object until it is
     /// first visited, so `Workspace.all` alone would refuse to return the user to it.
-    func testAWorkspaceDeclaredOnlyByABindingIsStillRestored() {
-        let (config, errors) = parseConfig("""
+    @Test func testAWorkspaceDeclaredOnlyByABindingIsStillRestored() {
+        let (config, errors) = parseConfigTuple("""
             [mode.main.binding]
             alt-d = 'workspace D'
             """)

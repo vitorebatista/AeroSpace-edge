@@ -114,6 +114,10 @@ The following variables can be used inside `<output-format>`:
 
 : Number. Window unique ID
 
+%{window-id-native}
+
+: Number. macOS native window ID (`CGWindowID`). Useful for integration with other tools that operate on native window IDs. macOS native tabs are separate windows under the hood. AeroSpace-edge treats the whole tab group as a single window with a stable `%{window-id}`, but `%{window-id-native}` changes whenever another tab is brought to the front. Different apps implement tabs differently. Apps that use native tabs: Finder.app, Terminal.app. Apps that don't use native tabs: Safari. Third-party apps usually don't use native tabs
+
 %{window-title}
 
 : String. Window title
@@ -168,11 +172,11 @@ The following variables can be used inside `<output-format>`:
 
 %{workspace-root-container-layout}
 
-: String. The layout (`v_tiles`, `h_tiles`, `v_accordion`, `h_accordion`) of the workspace the window belongs to.
+: String. The layout (`v_tiles`, `h_tiles`, `v_accordion`, `h_accordion`) of the workspace’s root container
 
 %{monitor-id}
 
-: 1-based Number. Sequential number of the belonging monitor.
+: 1-based Number. Sequential number of the belonging monitor
 
 %{monitor-appkit-nsscreen-screens-id}
 

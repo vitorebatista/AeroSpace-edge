@@ -7,9 +7,9 @@ struct SummonWorkspaceCommand: Command {
 
     func run(_ env: CmdEnv, _ io: CmdIo) -> BinaryExitCode {
         let workspace = Workspace.get(byName: args.target.val.raw)
-        let focusedMonitor = focus.workspace.workspaceMonitor
+        let focusedMonitor = globalFocus.workspace.workspaceMonitorInfo
 
-        if focusedMonitor.activeWorkspace == workspace {
+        if focusedMonitor.visibleWorkspace == workspace {
             return switch args.failIfNoop {
                 case true: .fail
                 case false:
@@ -19,19 +19,19 @@ struct SummonWorkspaceCommand: Command {
 
         if !workspace.isVisible {
             // Then we just need to summon the workspace to the focused monitor.
-            if focusedMonitor.setActiveWorkspace(workspace) {
+            if focusedMonitor.setVisibleWorkspace(workspace) {
                 return .from(bool: workspace.focusWorkspace())
             } else {
                 return .fail(io.err("Can't move workspace '\(workspace.name)' to monitor '\(focusedMonitor.name)'. workspace-to-monitor-force-assignment doesn't allow it"))
             }
         } else {
             // The workspace is already visible on another monitor.
-            let otherMonitor = workspace.workspaceMonitor
-            let currentWorkspace = focusedMonitor.activeWorkspace
+            let otherMonitor = workspace.workspaceMonitorInfo
+            let currentWorkspace = focusedMonitor.visibleWorkspace
 
             switch args.whenVisible {
                 case .swap:
-                    if otherMonitor.setActiveWorkspace(currentWorkspace) && focusedMonitor.setActiveWorkspace(workspace) {
+                    if otherMonitor.setVisibleWorkspace(currentWorkspace) && focusedMonitor.setVisibleWorkspace(workspace) {
                         return .from(bool: workspace.focusWorkspace())
                     } else {
                         return .fail(io.err("Can't swap workspaces due to monitor force assignment restrictions"))

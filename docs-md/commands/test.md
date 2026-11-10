@@ -11,41 +11,31 @@ Condition evaluation utility
 ## Synopsis
 
 ```synopsis
-aerospace-edge test [-h|--help] <lhs> .= <rhs>
-aerospace-edge test [-h|--help] <lhs> /= <rhs>
-aerospace-edge test [-h|--help] <lhs> .~ <rhs>
-aerospace-edge test [-h|--help] <lhs> /~ <rhs>
+aerospace-edge test [-h|--help] <lhs> = <rhs>
+aerospace-edge test [-h|--help] <lhs> ~= <rhs>
 ```
 
 ## Description
 
 The `test` utility evaluates the expression and, if it evaluates to true, returns a zero (true) exit status; otherwise it returns 1 (false).
 
-The utility is inspired by builtin `/bin/test` utility.
+The utility is inspired by the builtin `/bin/test` utility.
 
-`<lhs> .= <rhs>`
+`<lhs> = <rhs>`
 
-: Tests that `<lhs>` equals to `<rhs>`
+: Tests that `<lhs>` equals to `<rhs>`.
 
-`<lhs> /= <rhs>`
+`<lhs> ~= <rhs>`
 
-: Tests that `<lhs>` does NOT equal to `<rhs>`
+: Tests that `<lhs>` contains case insensitive `<rhs>` regex. The command fails if `<lhs>` is not of type string.
 
-`<lhs> .~ <rhs>`
-
-: Tests that `<lhs>` contains case insensitive `<rhs>` regex. The operator fails if `<lhs>` is not a string
-
-`<lhs> /~ <rhs>`
-
-: Tests that `<lhs>` does NOT contain case insensitive `<rhs>` regex. The operator fails if `<lhs>` is not a string
-
-The choice of symbols is dictated by the shell expansion rules that "helpfully" expand arguments, if they start either with an exclamation mark or with an equals character. The dot prefix is used as a safe and neutral character. The slash denotes negation, following a common convention in functional programming (mnemonics: it "crosses out" the operator). The tilde is widely used in scripting languages to indicate regex matching.
+To negate the result, use [`test-not`](test-not.md).
 
 ## Examples
 
-Test if the application ID equals to Chrome: `aerospace-edge test %{app-bundle-id} .= com.google.Chrome`
+Test if the application ID equals to Chrome: `aerospace-edge test %{app-bundle-id} = com.google.Chrome`
 
-Test if the application name contains "chrome" (case insensitive): `aerospace-edge test %{app-name} .~ chrome`
+Test if the application name contains "chrome" (case insensitive): `aerospace-edge test %{app-name} ~= chrome`
 
 ## Arguments
 
@@ -62,6 +52,10 @@ Test if the application name contains "chrome" (case insensitive): `aerospace-ed
 %{window-id}
 
 : Number. Window unique ID
+
+%{window-id-native}
+
+: Number. macOS native window ID (`CGWindowID`). Useful for integration with other tools that operate on native window IDs. macOS native tabs are separate windows under the hood. AeroSpace-edge treats the whole tab group as a single window with a stable `%{window-id}`, but `%{window-id-native}` changes whenever another tab is brought to the front. Different apps implement tabs differently. Apps that use native tabs: Finder.app, Terminal.app. Apps that don't use native tabs: Safari. Third-party apps usually don't use native tabs
 
 %{window-title}
 
@@ -113,11 +107,11 @@ Test if the application name contains "chrome" (case insensitive): `aerospace-ed
 
 %{workspace-root-container-layout}
 
-: String. The layout (`v_tiles`, `h_tiles`, `v_accordion`, `h_accordion`) of the workspace the window belongs to.
+: String. The layout (`v_tiles`, `h_tiles`, `v_accordion`, `h_accordion`) of the workspace’s root container
 
 %{monitor-id}
 
-: 1-based Number. Sequential number of the belonging monitor.
+: 1-based Number. Sequential number of the belonging monitor
 
 %{monitor-appkit-nsscreen-screens-id}
 
@@ -135,11 +129,11 @@ Test if the application name contains "chrome" (case insensitive): `aerospace-ed
 
 0
 
-: All the supplied conditions have evaluated to true.
+: The expression has evaluated to `true`.
 
 1
 
-: One of the supplied conditions has evaluated to false.
+: The expression has evaluated to `false`.
 
 >1
 

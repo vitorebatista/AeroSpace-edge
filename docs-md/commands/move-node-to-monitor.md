@@ -14,7 +14,7 @@ Move window to monitor targeted by relative direction, by order, or by pattern
 aerospace-edge move-node-to-monitor [-h|--help] [--window-id <window-id>] [--focus-follows-window]
                                [--wrap-around] (left|down|up|right|next|prev)
 aerospace-edge move-node-to-monitor [-h|--help] [--window-id <window-id>] [--focus-follows-window]
-                               [--fail-if-noop] <monitor-pattern>...
+                               [--fail-if-noop] [--] <monitor-pattern>...
 ```
 
 ## Description

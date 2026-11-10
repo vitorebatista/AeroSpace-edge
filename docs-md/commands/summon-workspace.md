@@ -11,7 +11,7 @@ Move the requested workspace to the focused monitor.
 ## Synopsis
 
 ```synopsis
-aerospace-edge summon-workspace [-h|--help] [--fail-if-noop] [--when-visible (focus|swap)] <workspace>
+aerospace-edge summon-workspace [-h|--help] [--fail-if-noop] [--when-visible (focus|swap)] [--] <workspace>
 ```
 
 ## Description

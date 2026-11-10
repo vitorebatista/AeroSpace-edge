@@ -3,7 +3,6 @@ public struct EnableNormalizationCmdArgs: CmdArgs {
     fileprivate init(rawArgs: StrArrSlice) { self.commonState = .init(rawArgs) }
     public static let parser: CmdParser<Self> = .init(
         kind: .enableNormalization,
-        allowInConfig: true,
         help: enable_normalization_help_generated,
         flags: [
             "--fail-if-noop": trueBoolFlag(\.failIfNoop),

@@ -1,9 +1,8 @@
-#!/bin/bash
+#!/usr/bin/env bash
 cd "$(dirname "$0")/.."
 source ./script/setup.sh
 
 all=0
-antlr=0
 complgen=0
 swiftlint=0
 swiftformat=0
@@ -11,7 +10,6 @@ xcodegen=0
 periphery=0
 while test $# -gt 0; do
     case $1 in
-        --antlr) antlr=1; shift ;;
         --complgen) complgen=1; shift ;;
         --swiftlint) swiftlint=1; shift ;;
         --xcodegen) xcodegen=1; shift ;;
@@ -29,18 +27,6 @@ create-marker() {
     rm -rf "$dir" && mkdir -p "$dir"
     touch "$1"
 }
-
-if test $all == 1 || test $antlr == 1; then
-    # https://github.com/antlr/antlr4/releases
-    antlr_tools='antlr4-tools==0.2.1'
-    marker=$(get-marker antlr $antlr_tools $antlr_version)
-    if ! test -f "$marker"; then
-        python3 -m venv .deps/python-venv
-        source .deps/python-venv/bin/activate
-        python3 -m pip install "$antlr_tools"
-        create-marker "$marker"
-    fi
-fi
 
 if test $all == 1 || test $complgen == 1; then
     # https://github.com/adaszko/complgen/releases
@@ -78,40 +64,40 @@ lazy-download-zip-and-link-bin() {
 
 if test $all == 1 || test $swiftlint == 1; then
     # https://github.com/realm/SwiftLint/releases
-    swiftlint_version=0.63.2
+    swiftlint_version=0.65.1
     lazy-download-zip-and-link-bin \
         swiftlint \
         https://github.com/realm/SwiftLint/releases/download/$swiftlint_version/SwiftLintBinary.artifactbundle.zip \
-        '12befab676fc972ffde2ec295d016d53c3a85f64aabd9c7fee0032d681e307e9  .deps/swiftlint/dist/zip.zip' \
+        'c3a1d77647ca18c1b7e9be7dbc6cd4490d26422f28814b76370244ff61970869  .deps/swiftlint/dist/zip.zip' \
         SwiftLintBinary.artifactbundle/macos/swiftlint
 fi
 
 if test $all == 1 || test $xcodegen == 1; then
     # https://github.com/yonaskolb/XcodeGen/releases
-    xcodegen_version=2.45.3
+    xcodegen_version=2.46.0
     lazy-download-zip-and-link-bin \
         xcodegen \
         https://github.com/yonaskolb/XcodeGen/releases/download/$xcodegen_version/xcodegen.artifactbundle.zip \
-        '6a3cb84183c7fc88ebe0796af6a84bbf07b005bcdc61eaaef13a8a661d0675b8  .deps/xcodegen/dist/zip.zip' \
+        'ef6d0a23bfb7393387f98e321ffd78a487231172e2e78c48d3c26275c263fd0c  .deps/xcodegen/dist/zip.zip' \
         xcodegen.artifactbundle/xcodegen-$xcodegen_version-macosx/bin/xcodegen
 fi
 
 if test $all == 1 || test $swiftformat == 1; then
     # https://github.com/nicklockwood/SwiftFormat/releases
-    swiftformat_version=0.60.1
+    swiftformat_version=0.64.4
     lazy-download-zip-and-link-bin \
         swiftformat \
         https://github.com/nicklockwood/SwiftFormat/releases/download/$swiftformat_version/swiftformat.artifactbundle.zip \
-        'cb4738085cf39c08da00b79b4a3683e77458ca12909934d04e5087d8e73f5e43  .deps/swiftformat/dist/zip.zip' \
+        'c2ba19f5f70a1aba089f836ada7960268ec9a68671d61059fec1a565afb50836  .deps/swiftformat/dist/zip.zip' \
         swiftformat.artifactbundle/swiftformat-$swiftformat_version-macos/bin/swiftformat
 fi
 
 if test $all == 1 || test $periphery == 1; then
-    # https://github.com/peripheryapp/periphery/releases
-    periphery_version=3.7.2
+    # https://github.com/nikitabobko/periphery/releases
+    periphery_version=1.0.0
     lazy-download-zip-and-link-bin \
         periphery \
-        https://github.com/peripheryapp/periphery/releases/download/$periphery_version/periphery-$periphery_version.zip \
-        '3c1fa5214ffc3e7d184e898a4b96597b45f436982dd6e5e51295aaefa3cab601  .deps/periphery/dist/zip.zip' \
+        https://github.com/nikitabobko/periphery/releases/download/v$periphery_version/periphery-arm-v$periphery_version.zip \
+        '28ef394d85c0b7edc76b9060f519cc03742c865c4a922a2e8efe27344e5e2132  .deps/periphery/dist/zip.zip' \
         periphery
 fi

@@ -12,8 +12,7 @@ Swaps the focused window with another window.
 
 ```synopsis
 aerospace-edge swap [-h|--help] [--window-id <window-id>] [--swap-focus]
-               [--wrap-around]
-               (left|down|up|right|dfs-next|dfs-prev)
+               [--wrap-around] (left|down|up|right|dfs-next|dfs-prev)
 ```
 
 ## Description

@@ -11,7 +11,9 @@ Move the focused window in the given direction
 ## Synopsis
 
 ```synopsis
-aerospace-edge move [-h|--help] [--window-id <window-id>] [--boundaries <boundary>] [--boundaries-action <boundary-action>] (left|down|up|right)
+aerospace-edge move [-h|--help] [--window-id <window-id>] [--boundaries <boundary>]
+               [--boundaries-action <boundary-action>] [--fail-if-fullscreen]
+               [--fail-if-macos-native-fullscreen] (left|down|up|right)
 ```
 
 ## Description
@@ -41,6 +43,14 @@ Deprecated name: `move-through`
 : Defines the behavior when requested to move across the `<boundary>`.  
   `<boundary-action>` possible values: `(stop|fail|create-implicit-container|create-implicit-container-or-fail)`.  
   The default is: `create-implicit-container`
+
+`--fail-if-fullscreen`
+
+: Exit with non-zero code if the target window is fullscreen by the `fullscreen` command.
+
+`--fail-if-macos-native-fullscreen`
+
+: Exit with non-zero code if the target window is in macOS native fullscreen.
 
 ## Examples
 

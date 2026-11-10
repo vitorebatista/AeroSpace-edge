@@ -11,7 +11,7 @@ Focus the specified workspace
 ## Synopsis
 
 ```synopsis
-aerospace-edge workspace [-h|--help] [--auto-back-and-forth] [--fail-if-noop] <workspace-name>
+aerospace-edge workspace [-h|--help] [--auto-back-and-forth] [--fail-if-noop] [--] <workspace-name>
 aerospace-edge workspace [-h|--help] [--wrap-around] [--stdin|--no-stdin] (next|prev)
 ```
 
@@ -27,7 +27,7 @@ Focuses next or previous workspace in **the list**.
 
 - If `--stdin` is specified, then **the list** is taken from stdin
 
-- Otherwise, **the list** is defined as all workspaces on focused monitor in alphabetical order
+- Otherwise, **the list** is defined as all workspaces (even empty ones) on focused monitor in alphabetical order
 
 ## Options
 
@@ -54,6 +54,12 @@ Focuses next or previous workspace in **the list**.
 `--no-stdin`
 
 : Ignore the list of workspaces from stdin, even if provided. Incompatible with `--stdin`
+
+## Arguments
+
+`<workspace-name>`
+
+: Workspace name to focus.
 
 ## Examples
 

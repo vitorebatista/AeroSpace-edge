@@ -84,8 +84,10 @@ nav:
       - commands/close.md
       - commands/config.md
       - commands/debug-windows.md
+      - commands/echo.md
       - commands/enable-normalization.md
       - commands/enable.md
+      - commands/eval.md
       - commands/exec-and-forget.md
       - commands/false.md
       - commands/flatten-workspace-tree.md
@@ -111,10 +113,12 @@ nav:
       - commands/move.md
       - commands/reload-config.md
       - commands/resize.md
+      - commands/run-callback.md
       - commands/split.md
       - commands/subscribe.md
       - commands/summon-workspace.md
       - commands/swap.md
+      - commands/test-not.md
       - commands/test.md
       - commands/trigger-binding.md
       - commands/true.md

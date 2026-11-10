@@ -9,12 +9,15 @@ import Foundation
 /// happened to be active. This writes the same ``FrozenWorld`` to disk on a debounce and replays it
 /// once, at startup, after the first refresh session has discovered the live windows.
 ///
-/// Windows are matched back by WindowServer id, which stays valid for as long as the window itself
-/// lives — so it survives an AeroSpace restart but not a reboot or an app relaunch. `identities`
-/// carries an app-bundle-id + title for each window so those cases can still be matched by name.
+/// ``FrozenWorld`` keys windows by ``OpaqueWindowId``, which AeroSpace allocates per process, so it
+/// means nothing after a restart. `identities` carries, for each persisted opaque id, the native
+/// WindowServer id (valid for as long as the window itself lives — so it survives an AeroSpace
+/// restart but not a reboot or an app relaunch) and an app-bundle-id + title so those cases can
+/// still be matched by name.
 private struct PersistedLayout: Codable {
     /// Bumped when the shape below changes, so an old file is discarded rather than misread.
-    static let currentVersion = 2
+    /// 3: upstream's monitor-tree ``FrozenWorld`` (workspaces nested in monitors) and opaque window ids
+    static let currentVersion = 3
     var version: Int = currentVersion
     let world: FrozenWorld
     let identities: [WindowIdentity]
@@ -25,9 +28,12 @@ private struct PersistedLayout: Codable {
 }
 
 private struct WindowIdentity: Codable {
-    let windowId: UInt32
-    let appBundleId: String
-    let title: String
+    /// The id the persisted ``FrozenWorld`` uses. Only meaningful inside the process that wrote it
+    let windowId: OpaqueWindowId
+    /// WindowServer id. Survives an AeroSpace restart, not an app relaunch
+    let nativeWindowId: UInt32?
+    let appBundleId: String?
+    let title: String?
 }
 
 private let persistedLayoutUrl: URL? = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?
@@ -61,7 +67,7 @@ private let persistDebounce: Duration = .seconds(2)
 @MainActor func scheduleLayoutPersist() {
     guard !isUnitTest, !serverArgs.isReadOnly else { return }
     persistTask?.cancel()
-    persistTask = Task { @MainActor in
+    persistTask = Task.startUnstructured { @MainActor in
         // A cancelled sleep throws, which is exactly the "another change arrived, skip this write" path.
         guard (try? await Task.sleep(for: persistDebounce)) != nil else { return }
         await persistLayoutNow()
@@ -70,20 +76,19 @@ private let persistDebounce: Duration = .seconds(2)
 
 @MainActor private func persistLayoutNow() async {
     guard let url = persistedLayoutUrl else { return }
-    let allWs = Workspace.all
-    let windowIds = allWs.flatMap { collectAllWindowIds(workspace: $0) }.toSet()
+    let windowIds = Workspace.all.flatMap { collectAllWindowIdsRecursive($0) }.toSet()
     let world = FrozenWorld(
-        workspaces: allWs.map { FrozenWorkspace($0) },
-        monitors: monitors.map(FrozenMonitor.init),
+        monitors: Monitor.all.map(FrozenMonitor.init),
         windowIds: windowIds,
     )
     var identities: [WindowIdentity] = []
-    for id in windowIds.sorted() {
-        guard let window = Window.get(byId: id), let bundleId = window.app.rawAppBundleId else { continue }
-        guard let title = try? await window.title else { continue }
-        identities.append(WindowIdentity(windowId: id, appBundleId: bundleId, title: title))
+    for id in windowIds.sorted(by: { $0.rawId < $1.rawId }) {
+        guard let window = Window.get(byId: id) else { continue }
+        let nativeWindowId = (window as? MacWindow)?.macApp.nativeWindowId(of: id)
+        let title = try? await window.getTitle(.nonCancellable)
+        identities.append(WindowIdentity(windowId: id, nativeWindowId: nativeWindowId, appBundleId: window.app.rawAppBundleId, title: title))
     }
-    let payload = PersistedLayout(world: world, identities: identities, focusedWorkspace: focus.workspace.name)
+    let payload = PersistedLayout(world: world, identities: identities, focusedWorkspace: globalFocus.workspace.name)
     // Best effort throughout: a state file that can't be written must never take the WM down.
     do {
         try FileManager.default.createDirectory(
@@ -139,14 +144,18 @@ func workspaceToFocusAtStartup(remembered: String? = nil, persisted: String?, ex
     [remembered, persisted].compactMap { $0 }.first { existing.contains($0) }
 }
 
-/// Maps each persisted window id onto a live window: same id first, then app-bundle-id + title among
-/// the windows no persisted entry has claimed yet.
-@MainActor private func resolveWindows(_ persisted: PersistedLayout) async -> [UInt32: Window] {
-    var mapping: [UInt32: Window] = [:]
-    var claimed: Set<UInt32> = []
-    for id in persisted.world.windowIds {
-        guard let window = Window.get(byId: id) else { continue }
-        mapping[id] = window
+/// Maps each persisted window id onto a live window: same native WindowServer id first, then
+/// app-bundle-id + title among the windows no persisted entry has claimed yet.
+@MainActor private func resolveWindows(_ persisted: PersistedLayout) async -> [OpaqueWindowId: Window] {
+    var mapping: [OpaqueWindowId: Window] = [:]
+    var claimed: Set<OpaqueWindowId> = []
+    for identity in persisted.identities {
+        guard let nativeWindowId = identity.nativeWindowId else { continue }
+        let window = MacApp.allAppsMap.values.lazy
+            .compactMap { app in app.opaqueWindowId(of: nativeWindowId).flatMap { Window.get(byId: $0) } }
+            .first
+        guard let window, !claimed.contains(window.windowId) else { continue }
+        mapping[identity.windowId] = window
         claimed.insert(window.windowId)
     }
 
@@ -159,11 +168,12 @@ func workspaceToFocusAtStartup(remembered: String? = nil, persisted: String?, ex
     var candidates: [String: [Window]] = [:]
     for window in MacWindow.allWindowsMap.values where !claimed.contains(window.windowId) {
         guard let bundleId = window.app.rawAppBundleId else { continue }
-        guard let title = try? await window.title else { continue }
+        guard let title = try? await window.getTitle(.nonCancellable) else { continue }
         candidates[identityKey(bundleId, title), default: []].append(window)
     }
     for identity in unresolved {
-        let key = identityKey(identity.appBundleId, identity.title)
+        guard let appBundleId = identity.appBundleId, let title = identity.title else { continue }
+        let key = identityKey(appBundleId, title)
         guard let window = candidates[key]?.popLast() else { continue }
         mapping[identity.windowId] = window
     }

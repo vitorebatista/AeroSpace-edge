@@ -13,7 +13,7 @@ Focus monitor by relative direction, by order, or by pattern
 ```synopsis
 aerospace-edge focus-monitor [-h|--help] [--wrap-around] (left|down|up|right)
 aerospace-edge focus-monitor [-h|--help] [--wrap-around] (next|prev)
-aerospace-edge focus-monitor [-h|--help] <monitor-pattern>...
+aerospace-edge focus-monitor [-h|--help] [--] <monitor-pattern>...
 ```
 
 ## Description

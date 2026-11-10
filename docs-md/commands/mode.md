@@ -11,7 +11,7 @@ Activate the specified binding mode
 ## Synopsis
 
 ```synopsis
-aerospace-edge mode [-h|--help] <binding-mode>
+aerospace-edge mode [-h|--help] [--] <binding-mode>
 ```
 
 ## Description

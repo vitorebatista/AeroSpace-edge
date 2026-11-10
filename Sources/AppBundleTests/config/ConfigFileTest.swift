@@ -1,12 +1,14 @@
 @testable import AppBundle
 import Common
 import Foundation
-import XCTest
+import Testing
 
-final class ConfigFileTest: XCTestCase {
+@MainActor
+@Suite(.serializedGlobally)
+struct ConfigFileTest {
     /// AeroSpace-edge must look at its own config before falling back to an upstream AeroSpace config,
     /// and the two must live in separate tiers so that having both isn't an "ambiguous config" error.
-    func testOwnConfigIsPreferredOverUpstreamConfig() {
+    @Test func testOwnConfigIsPreferredOverUpstreamConfig() {
         let home = URL(filePath: "/Users/test/")
         let xdg = URL(filePath: "/Users/test/.config/")
         let tiers = configCandidateTiers(home: home, xdgConfigHome: xdg).map { $0.map(\.path) }

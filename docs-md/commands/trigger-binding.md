@@ -11,7 +11,7 @@ Trigger AeroSpace binding as if it was pressed by user
 ## Synopsis
 
 ```synopsis
-aerospace-edge trigger-binding [-h|--help] <binding> --mode <mode-id>
+aerospace-edge trigger-binding [-h|--help] --mode <mode-id> [--] <binding>
 ```
 
 ## Description

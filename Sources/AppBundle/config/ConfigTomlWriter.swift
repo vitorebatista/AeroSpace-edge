@@ -13,7 +13,7 @@ enum ConfigTomlWriter {
     /// `execConfig` is the *expanded* environment (writing it back would bake the whole
     /// inherited process environment into the user's file), and the callbacks are
     /// `[any Command]`. Those live here as raw file-shaped values instead.
-    struct ConfigDraft: ConvenienceCopyable, Equatable {
+    struct ConfigDraft: Withable, Equatable {
         var startAtLogin: Bool
         var autoReloadConfig: Bool
         var automaticallyUnhideMacosHiddenApps: Bool
@@ -115,7 +115,7 @@ enum ConfigTomlWriter {
             focusedWindowBorderOpacity: config.focusedWindowBorderOpacity,
             focusedWindowBorderRadius: config.focusedWindowBorderRadius,
             focusedWindowBorderInset: config.focusedWindowBorderInset,
-            configVersion: config.configVersion,
+            configVersion: config.configVersion.rawValue,
             persistentWorkspaces: config.persistentWorkspaces,
             gaps: config.gaps,
             workspaceToMonitorForceAssignment: config.workspaceToMonitorForceAssignment,

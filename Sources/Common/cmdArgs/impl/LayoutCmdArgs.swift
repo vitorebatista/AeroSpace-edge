@@ -3,31 +3,28 @@ public struct LayoutCmdArgs: CmdArgs {
     fileprivate init(rawArgs: StrArrSlice) { self.commonState = .init(rawArgs) }
     public static let parser: CmdParser<Self> = .init(
         kind: .layout,
-        allowInConfig: true,
         help: layout_help_generated,
         flags: [
             "--window-id": windowIdSubArgParser(),
+            "--workspace": workspaceSubArgParser(),
             "--root": trueBoolFlag(\.root),
+            "--fail-if-noop": trueBoolFlag(\.failIfNoop),
             "--for-next-detected-window": trueBoolFlag(\.forNextDetectedWindow),
         ],
         posArgs: [newMandatoryPosArgParser(\.toggleBetween, parseToggleBetween, placeholder: LayoutDescription.unionLiteral)],
-        conflictingOptions: [
-            ["--root", "--window-id"],
-
-            // todo introduce a flagsAllowlist primitive
-            ["--for-next-detected-window", "--window-id"],
-            ["--for-next-detected-window", "--root"],
+        conflictingFlags: [
+            ["--window-id", "--workspace"],
+        ],
+        flagAllowlist: [
+            "--for-next-detected-window": [], // Allow nothing else
         ],
     )
 
     public var toggleBetween: Lateinit<[LayoutDescription]> = .uninitialized
-    public var root: Bool = false
-    public var forNextDetectedWindow: Bool = false
 
-    public init(rawArgs: [String], toggleBetween: [LayoutDescription], root: Bool = false) {
+    public init(rawArgs: [String], toggleBetween: [LayoutDescription]) {
         self.commonState = .init(rawArgs.slice)
         self.toggleBetween = .initialized(toggleBetween)
-        self.root = root
     }
 
     public enum LayoutDescription: String, CaseIterable, Equatable, Sendable, AeroAny {
@@ -35,10 +32,15 @@ public struct LayoutCmdArgs: CmdArgs {
         case horizontal, vertical
         case h_accordion, v_accordion, h_tiles, v_tiles
         case tiling, floating
-        case sticky
+        case sticky // Fork: sticky floating windows follow the focused workspace
     }
+
+    public var root: Bool = false
+    public var failIfNoop: Bool = false
+    public var forNextDetectedWindow: Bool = false
 }
 
+public let layoutCommandRootFlagIncompatibilityMsg = "layout command: --root and tiling|floating are incompatible"
 public let layoutCommandForNextDetectedWindowFlagIncompatibilityMsg =
     "layout command: --for-next-detected-window allows only one tiling|floating <target-layout> argument"
 
@@ -63,23 +65,33 @@ private func parseToggleBetween(input: PosArgParserInput) -> ParsedCliArgs<[Layo
 }
 
 func parseLayoutCmdArgs(_ args: StrArrSlice) -> ParsedCmd<LayoutCmdArgs> {
-    parseSpecificCmdArgs(LayoutCmdArgs(rawArgs: args), args).map {
-        check(!$0.toggleBetween.val.isEmpty)
-        return $0
-    }
-    .filterNot("'tiling' and 'floating' are incompatible with --root") {
-        $0.root && $0.toggleBetween.val.contains(where: { $0 == .tiling || $0 == .floating })
-    }
-    .filter(layoutCommandForNextDetectedWindowFlagIncompatibilityMsg) { cmdArgs in
-        !cmdArgs.forNextDetectedWindow || true == cmdArgs.toggleBetween.val.singleOrNil()?.then {
-            switch $0 {
-                case .floating, .tiling: true
-                case .accordion, .h_accordion, .h_tiles,
-                     .horizontal, .tiles, .v_accordion, .v_tiles,
-                     .vertical, .sticky: false
+    parseSpecificCmdArgs(LayoutCmdArgs(rawArgs: args), args)
+        .map {
+            check(!$0.toggleBetween.val.isEmpty)
+            return $0
+        }
+        .filter(layoutCommandRootFlagIncompatibilityMsg) { cmdArgs in
+            !cmdArgs.root || cmdArgs.toggleBetween.val.allSatisfy {
+                switch $0 {
+                    case .floating, .tiling, .sticky: false
+                    case .accordion, .h_accordion, .h_tiles,
+                         .horizontal, .tiles, .v_accordion, .v_tiles,
+                         .vertical: true
+                }
             }
         }
-    }
+        .filter(layoutCommandForNextDetectedWindowFlagIncompatibilityMsg) { cmdArgs in
+            !cmdArgs.forNextDetectedWindow || true == cmdArgs.toggleBetween.val.singleOrNil()?.then {
+                switch $0 {
+                    case .floating, .tiling: true
+                    case .accordion, .h_accordion, .h_tiles,
+                         .horizontal, .tiles, .v_accordion, .v_tiles,
+                         .vertical, .sticky: false
+                }
+            }
+        }
+        .filter("--workspace flag requires using an explicit --root flag") { ($0.workspaceName != nil).implies($0.root) }
+        .filter("--fail-if-noop allows only one <target-layout> argument") { $0.failIfNoop.implies($0.toggleBetween.val.count == 1) }
 }
 
 extension String {

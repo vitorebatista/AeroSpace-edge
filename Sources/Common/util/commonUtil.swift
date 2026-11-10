@@ -12,17 +12,10 @@ public var refreshSessionEvent: RefreshSessionEvent? = nil
 @TaskLocal
 private var recursionDetectorDuringTermination = false
 
-public func dieT<T>(
-    _ __message: String = "",
-    file: StaticString = #fileID,
-    line: Int = #line,
-    column: Int = #column,
-    function: String = #function,
-) -> T {
+public func bugPrompt(_ __message: String = "", isDie: Bool = false, fileId: MyFileId = #myFileId) -> String {
     let _message = __message.contains("\n") ? "\n" + __message.prefixLines(with: "    ") : __message
     let thread = Thread.current
-    let message =
-        """
+    return """
         Please report to:
             https://github.com/vitorebatista/AeroSpace-edge/discussions/categories/potential-bugs
             Please describe what you did to trigger this error
@@ -36,15 +29,20 @@ public func dieT<T>(
         Is main thread: \(thread.isMainThread)
         axTaskLocalAppThreadToken: \(axTaskLocalAppThreadToken.prettyDescription)
         macOS version: \(ProcessInfo().operatingSystemVersionString)
-        Coordinate: \(file):\(line):\(column) \(function)
+        Coordinate: \(fileId.file):\(fileId.line):\(fileId.column) \(fileId.function)
         recursionDetectorDuringTermination: \(recursionDetectorDuringTermination)
         cli: \(isCli)
+        die: \(isDie)
         Monitor count: \(NSScreen.screens.count)
         Displays have separate spaces: \(NSScreen.screensHaveSeparateSpaces)
 
         Stacktrace:
         \(getStringStacktrace())
         """
+}
+
+public func dieT<T>(_ __message: String = "", fileId: MyFileId = #myFileId) -> T {
+    let message = bugPrompt(__message, isDie: true, fileId: fileId)
     if !isUnitTest && isServer {
         showMessageInGui(
             filenameIfConsoleApp: recursionDetectorDuringTermination
@@ -54,14 +52,14 @@ public func dieT<T>(
             message: message,
         )
     }
-    if !recursionDetectorDuringTermination {
+    if let terminationHandler, !recursionDetectorDuringTermination {
         MainActor.runSync {
             $recursionDetectorDuringTermination.withValue(true) {
                 terminationHandler.beforeTermination()
             }
         }
     }
-    fatalError("\n" + message)
+    fatalError("\n" + message, file: fileId.file, line: fileId.line)
 }
 
 extension MainActor {
@@ -86,12 +84,14 @@ public enum RefreshSessionEvent: Sendable, CustomStringConvertible {
     case socketServer(any CmdArgs)
     case resetManipulatedWithMouse
     case ax(String)
-    case onFocusedMonitorChanged
-    case onFocusChanged
-    case onModeChanged
+    case focusFollowsMouse
 
     public var isStartup: Bool {
         if case .startup = self { return true } else { return false }
+    }
+
+    public var isFocusFollowsMouse: Bool {
+        if case .focusFollowsMouse = self { return true } else { return false }
     }
 
     public var description: String {
@@ -108,49 +108,25 @@ public enum RefreshSessionEvent: Sendable, CustomStringConvertible {
             case .resetManipulatedWithMouse: "resetManipulatedWithMouse"
             case .socketServer(let args): "socketServer: \(args)"
             case .startup: "startup"
-            case .onFocusedMonitorChanged: "onFocusedMonitorChanged"
-            case .onFocusChanged: "onFocusChanged"
-            case .onModeChanged: "onModeChanged"
+            case .focusFollowsMouse: "focusFollowsMouse"
         }
     }
 }
 
-public func throwT<T>(_ error: Error) throws -> T {
-    throw error
-}
+// periphery:ignore
+public func throwT<T, E: Error>(_ error: E) throws(E) -> T { throw error }
 
 public func getStringStacktrace() -> String { Thread.callStackSymbols.joined(separator: "\n") }
 
-@inlinable public func die(
-    _ message: String = "",
-    file: StaticString = #fileID,
-    line: Int = #line,
-    column: Int = #column,
-    function: String = #function,
-) -> Never {
-    dieT(message, file: file, line: line, column: column, function: function)
+@inlinable public func die(_ message: String = "", fileId: MyFileId = #myFileId) -> Never {
+    dieT(message, fileId: fileId)
 }
 
-public func check(
-    _ condition: Bool,
-    _ message: @autoclosure () -> String = "",
-    file: StaticString = #fileID,
-    line: Int = #line,
-    column: Int = #column,
-    function: String = #function,
-) {
+public func check(_ condition: Bool, _ message: @autoclosure () -> String = "", fileId: MyFileId = #myFileId) {
     if !condition {
-        die(message(), file: file, line: line, column: column, function: function)
+        die(message(), fileId: fileId)
     }
 }
-
-// Whether the process is a unit test bundle cannot change during the process
-// lifetime, so resolve it once. `isUnitTest` is read on hot paths (e.g. every
-// `mainMonitor` / `monitors` access via `rearrangeWorkspacesOnMonitors`),
-// and calling `NSClassFromString` there has been observed to crash with
-// EXC_BAD_ACCESS inside the dyld objc class lookup during display
-// reconfiguration. Caching the value removes that call from the hot path.
-public let isUnitTest: Bool = NSClassFromString("XCTestCase") != nil
 
 extension CaseIterable where Self: RawRepresentable, RawValue == String {
     public static var cliArgsCases: [String] { allCases.map(\.rawValue) }
@@ -163,10 +139,6 @@ extension [String] {
 
 extension Int {
     public func toDouble() -> Double { Double(self) }
-}
-
-public func + <K, V>(lhs: [K: V], rhs: [K: V]) -> [K: V] {
-    lhs.merging(rhs) { _, r in r }
 }
 
 extension String {
@@ -213,13 +185,9 @@ public func exitT<T>(_ exitCode: Int32, out: String? = nil, err: String? = nil) 
 /// 'id' stands for 'identity'. It's a common name in functional programming
 public func id<T>(_ t: T) -> T { t }
 
-@inlinable
-public func allowOnlyCancellationError<T>(_ block: () async throws -> sending T) async throws -> sending T {
-    do {
-        return try await block()
-    } catch let e as CancellationError {
-        throw e
-    } catch {
-        die("throws must only be used for CancellationError")
+@inlinable public func zipIfCountsAreEqual<C1, C2>(_ c1: C1, _ c2: C2) -> Zip2Sequence<C1, C2>? where C1: Collection, C2: Collection {
+    switch c1.count == c2.count {
+        case true: zip(c1, c2)
+        case false: nil
     }
 }

@@ -5,7 +5,6 @@ public struct ListModesCmdArgs: CmdArgs {
     }
     public static let parser: CmdParser<Self> = .init(
         kind: .listModes,
-        allowInConfig: false,
         help: list_modes_help_generated,
         flags: [
             "--count": trueBoolFlag(\.outputOnlyCount),
@@ -13,7 +12,7 @@ public struct ListModesCmdArgs: CmdArgs {
             "--json": trueBoolFlag(\.json),
         ],
         posArgs: [],
-        conflictingOptions: [
+        conflictingFlags: [
             ["--count", "--current"],
             ["--count", "--json"],
         ],

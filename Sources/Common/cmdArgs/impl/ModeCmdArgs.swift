@@ -3,10 +3,9 @@ public struct ModeCmdArgs: CmdArgs {
     public init(rawArgs: StrArrSlice) { self.commonState = .init(rawArgs) }
     public static let parser: CmdParser<Self> = .init(
         kind: .mode,
-        allowInConfig: true,
         help: mode_help_generated,
         flags: [:],
-        posArgs: [newMandatoryPosArgParser(\.targetMode, consumeStrCliArg, placeholder: "<binding-mode>")],
+        posArgs: [doubleDashArg(mandatory: false), newMandatoryPosArgParser(\.targetMode, consumeStrCliArg, placeholder: "<binding-mode>")],
     )
 
     public var targetMode: Lateinit<String> = .uninitialized

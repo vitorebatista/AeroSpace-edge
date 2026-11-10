@@ -1,8 +1,8 @@
 @testable import AppBundle
 import Common
-import XCTest
+import Testing
 
-private struct DetachedMonitor: Monitor {
+private struct DetachedMonitor: MonitorInfo {
     let monitorAppKitNsScreenScreensId = 42
     let name = "Detached"
     let rect: Rect
@@ -13,15 +13,17 @@ private struct DetachedMonitor: Monitor {
 }
 
 @MainActor
-final class MonitorActiveWorkspaceTest: XCTestCase {
-    override func setUp() async throws { setUpWorkspacesForTests() }
+@Suite(.serializedGlobally)
+struct MonitorActiveWorkspaceTest {
+    init() { setUpWorkspacesForTests() }
 
-    /// Regression: a `Monitor` that `NSScreen.screens` no longer reports (display
+    /// Regression (fork 01e97d8b): a monitor that `NSScreen.screens` no longer reports (display
     /// reconfiguration — closing/opening the lid with external monitors attached) used to
-    /// send `activeWorkspace` into unbounded recursion and blow the stack.
-    func testActiveWorkspaceOfDetachedMonitorTerminates() {
-        // `monitors` is `[testMonitor]` at (0, 0) under test, so this one can never be found.
+    /// send `activeWorkspace` (upstream: `visibleWorkspace` -> `toMonitorOrRearrangeMonitors`) into unbounded recursion
+    /// and blow the stack.
+    @Test func testActiveWorkspaceOfDetachedMonitorTerminates() {
+        // The monitor list is the single test monitor at (0, 0) under test, so this one can never be found.
         let detached = DetachedMonitor(rect: Rect(topLeftX: 9000, topLeftY: 9000, width: 1920, height: 1080))
-        assertNotNil(detached.activeWorkspace) // Hangs/crashes if the recursion comes back
+        assertNotNil(detached.visibleWorkspace) // Hangs/crashes if the recursion comes back
     }
 }

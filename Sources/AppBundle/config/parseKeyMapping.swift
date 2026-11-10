@@ -6,7 +6,7 @@ private let keyMappingParser: [String: any ParserProtocol<KeyMapping>] = [
     "key-notation-to-key-code": Parser(\.rawKeyNotationToKeyCode, parseKeyNotationToKeyCode),
 ]
 
-struct KeyMapping: ConvenienceCopyable, Equatable, Sendable {
+struct KeyMapping: Withable, Equatable, Sendable {
     enum Preset: String, CaseIterable, Sendable {
         case qwerty, dvorak, colemak
     }
@@ -31,31 +31,31 @@ struct KeyMapping: ConvenienceCopyable, Equatable, Sendable {
 /// `Hashable`. Declared next to the type rather than in the UI layer.
 extension KeyMapping.Preset: Hashable {}
 
-func parseKeyMapping(_ raw: Json, _ backtrace: ConfigBacktrace, _ errors: inout [ConfigParseError]) -> KeyMapping {
-    parseTable(raw, KeyMapping(), keyMappingParser, backtrace, &errors)
+func parseKeyMapping(_ raw: OrderedJson, _ backtrace: ConfigBacktrace, _ c: inout ConfigParserContext) -> KeyMapping {
+    parseNonEmptyTable(raw, KeyMapping(), keyMappingParser, backtrace, &c)
 }
 
-private func parsePreset(_ raw: Json, _ backtrace: ConfigBacktrace) -> ParsedConfig<KeyMapping.Preset> {
+private func parsePreset(_ raw: OrderedJson, _ backtrace: ConfigBacktrace) -> ResOrConfigParseDiagnostic<KeyMapping.Preset> {
     parseString(raw, backtrace).flatMap { parseEnum($0, KeyMapping.Preset.self).toParsedConfig(backtrace) }
 }
 
-private func parseKeyNotationToKeyCode(_ raw: Json, _ backtrace: ConfigBacktrace, _ errors: inout [ConfigParseError]) -> [String: Key] {
+private func parseKeyNotationToKeyCode(_ raw: OrderedJson, _ backtrace: ConfigBacktrace, _ c: inout ConfigParserContext) -> [String: Key] {
     var result: [String: Key] = [:]
     guard let table = raw.asDictOrNil else {
-        errors.append(expectedActualTypeError(expected: .table, actual: raw.tomlType, backtrace))
+        c.errors.append(expectedActualTypeDiagnostic(expected: .table, actual: raw.tomlType, backtrace))
         return result
     }
-    for (key, value): (String, Json) in table {
+    for (key, value): (String, OrderedJson) in table {
         if isValidKeyNotation(key) {
             let backtrace = backtrace + .key(key)
-            if let value = parseString(value, backtrace).getOrNil(appendErrorTo: &errors) {
+            if let value = parseString(value, backtrace).getOrNil(appendErrorTo: &c.errors) {
                 switch keyNotationToKeyCode[value] {
                     case let value?: result[key] = value
-                    case nil: errors.append(.semantic(backtrace, "\(value.singleQuoted) is invalid key code"))
+                    case nil: c.errors.append(.init(backtrace, "\(value.singleQuoted) is invalid key code"))
                 }
             }
         } else {
-            errors.append(.semantic(backtrace, "\(key.singleQuoted) is invalid key notation"))
+            c.errors.append(.init(backtrace, "\(key.singleQuoted) is invalid key notation"))
         }
     }
     return result

@@ -19,7 +19,7 @@ struct MoveNodeToWorkspaceCommand: Command {
                     stdin: args.useStdin ? io.readStdin() : nil,
                     target: target,
                 )
-                guard let ws else { return .fail(io.err("Can't resolve next or prev workspace")) }
+                guard let ws = ws.getOrNil(appendErrorTo: &io.stderr) else { return .fail }
                 targetWorkspace = ws
             case .direct(let name):
                 targetWorkspace = Workspace.get(byName: name.raw)
@@ -38,7 +38,9 @@ func moveWindowToWorkspace(_ window: Window, _ targetWorkspace: Workspace, _ io:
         }
     }
     let prevWorkspace = window.nodeWorkspace?.name
-    let targetContainer: NonLeafTreeNodeObject = window.isFloating ? targetWorkspace : targetWorkspace.rootTilingContainer
+    let targetContainer: NonLeafTreeNodeObject = window.isFloating
+        ? targetWorkspace.floatingWindowsContainer
+        : targetWorkspace.rootTilingContainer
     window.bind(to: targetContainer, adaptiveWeight: WEIGHT_AUTO, index: index)
     broadcastEvent(.windowMovedToWorkspace(windowId: window.windowId, workspace: targetWorkspace.name, prevWorkspace: prevWorkspace))
     return .from(bool: focusFollowsWindow ? window.focusWindow() : true)

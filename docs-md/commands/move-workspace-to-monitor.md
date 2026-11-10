@@ -13,7 +13,7 @@ Move workspace to monitor targeted by relative direction, by order, or by patter
 ```synopsis
 aerospace-edge move-workspace-to-monitor [-h|--help] [--workspace <workspace>] [--wrap-around] (left|down|up|right)
 aerospace-edge move-workspace-to-monitor [-h|--help] [--workspace <workspace>] [--wrap-around] (next|prev)
-aerospace-edge move-workspace-to-monitor [-h|--help] [--workspace <workspace>] <monitor-pattern>...
+aerospace-edge move-workspace-to-monitor [-h|--help] [--workspace <workspace>] [--] <monitor-pattern>...
 ```
 
 ## Description

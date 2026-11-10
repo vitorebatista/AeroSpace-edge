@@ -1,7 +1,7 @@
 import Common
 
 extension CmdArgs {
-    func toCommand() -> any Command {
+    func toCommand() -> ParsedCmd<any Command> {
         let command: any Command
         switch Self.info.kind {
             case ._false:
@@ -18,12 +18,16 @@ extension CmdArgs {
                 command = ConfigCommand(args: self as! ConfigCmdArgs)
             case .debugWindows:
                 command = DebugWindowsCommand(args: self as! DebugWindowsCmdArgs)
+            case .echo:
+                command = EchoCommand(args: self as! EchoCmdArgs)
             case .enable:
                 command = EnableCommand(args: self as! EnableCmdArgs)
             case .enableNormalization:
                 command = EnableNormalizationCommand(args: self as! EnableNormalizationCmdArgs)
+            case .eval:
+                command = EvalCommand(args: self as! EvalCmdArgs)
             case .execAndForget:
-                die("exec-and-forget is parsed separately")
+                return .failure("exec-and-forget is not a real command and it's NOT allowed in the shell", EXIT_CODE_TWO)
             case .flattenWorkspaceTree:
                 command = FlattenWorkspaceTreeCommand(args: self as! FlattenWorkspaceTreeCmdArgs)
             case .focus:
@@ -70,16 +74,20 @@ extension CmdArgs {
                 command = ReloadConfigCommand(args: self as! ReloadConfigCmdArgs)
             case .resize:
                 command = ResizeCommand(args: self as! ResizeCmdArgs)
+            case .runCallback:
+                command = RunCallbackCommand(args: self as! RunCallbackCmdArgs)
             case .split:
                 command = SplitCommand(args: self as! SplitCmdArgs)
             case .subscribe:
-                die("subscribe is handled separately")
+                return .failure("subscribe is not supported in the eval", EXIT_CODE_TWO)
             case .summonWorkspace:
                 command = SummonWorkspaceCommand(args: self as! SummonWorkspaceCmdArgs)
             case .swap:
                 command = SwapCommand(args: self as! SwapCmdArgs)
             case .test:
                 command = TestCommand(args: self as! TestCmdArgs)
+            case .testNot:
+                command = TestNotCommand(args: self as! TestNotCmdArgs)
             case .triggerBinding:
                 command = TriggerBindingCommand(args: self as! TriggerBindingCmdArgs)
             case .volume:
@@ -90,6 +98,6 @@ extension CmdArgs {
                 command = WorkspaceBackAndForthCommand(args: self as! WorkspaceBackAndForthCmdArgs)
         }
         check(command.info == Self.info)
-        return command
+        return .cmd(command)
     }
 }

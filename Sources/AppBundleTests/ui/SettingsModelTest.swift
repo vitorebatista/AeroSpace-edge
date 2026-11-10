@@ -1,10 +1,11 @@
 @testable import AppBundle
 import Common
 import Foundation
-import XCTest
+import Testing
 
 @MainActor
-final class SettingsModelTest: XCTestCase {
+@Suite(.serializedGlobally)
+struct SettingsModelTest {
     private enum ExpectedFailure: Error {
         case backup
         case permissions
@@ -12,12 +13,12 @@ final class SettingsModelTest: XCTestCase {
         case reload
     }
 
-    func testInheritEnvVarsWithATrailingComment() {
+    @Test func testInheritEnvVarsWithATrailingComment() {
         let raw = SettingsModel.rawExecConfig(from: "[exec]\ninherit-env-vars = true  # keep my PATH\n")
         assertEquals(raw.inheritEnvVariables, true)
     }
 
-    func testEnvVarWithATrailingComment() {
+    @Test func testEnvVarWithATrailingComment() {
         let raw = SettingsModel.rawExecConfig(from: """
             [exec.env-vars]
             PATH = '/opt/homebrew/bin' # my path
@@ -25,19 +26,19 @@ final class SettingsModelTest: XCTestCase {
         assertEquals(raw.overriddenVars["PATH"], "/opt/homebrew/bin")
     }
 
-    func testDottedKeyFormIsSeen() {
+    @Test func testDottedKeyFormIsSeen() {
         // No `[exec]` header at all. Missing this used to leave the draft on the default
         // `true`, after which the writer deleted the dotted key and wrote nothing back.
         let raw = SettingsModel.rawExecConfig(from: "exec.inherit-env-vars = false\n")
         assertEquals(raw.inheritEnvVariables, false)
     }
 
-    func testDottedEnvVarKeyIsSeen() {
+    @Test func testDottedEnvVarKeyIsSeen() {
         let raw = SettingsModel.rawExecConfig(from: "exec.env-vars.FOO = 'bar'\n")
         assertEquals(raw.overriddenVars["FOO"], "bar")
     }
 
-    func testQuotedEnvVarKeyIsSeenAsOneName() {
+    @Test func testQuotedEnvVarKeyIsSeenAsOneName() {
         // A dot in a quoted TOML key is part of the environment variable's name, not a
         // nested table. This is the spelling ConfigTomlWriter emits for UI input such as
         // "MY.PATH", so recovering it correctly is required before the user edits [exec].
@@ -45,14 +46,14 @@ final class SettingsModelTest: XCTestCase {
         assertEquals(raw.overriddenVars, ["MY.PATH": "bin"])
     }
 
-    func testValuesAreNotInterpolated() {
+    @Test func testValuesAreNotInterpolated() {
         // `$VAR` has to come back exactly as written: this value is destined to be written
         // straight back into the user's file, not to be executed.
         let raw = SettingsModel.rawExecConfig(from: "[exec.env-vars]\nPATH = '/my/bin:${PATH}'\n")
         assertEquals(raw.overriddenVars["PATH"], "/my/bin:${PATH}")
     }
 
-    func testEscapesInABasicStringAreResolved() {
+    @Test func testEscapesInABasicStringAreResolved() {
         let raw = SettingsModel.rawExecConfig(from: #"""
         [exec.env-vars]
         QUOTED = "a\"b"
@@ -60,19 +61,19 @@ final class SettingsModelTest: XCTestCase {
         assertEquals(raw.overriddenVars["QUOTED"], #"a"b"#)
     }
 
-    func testDefaultsWhenThereIsNoExecTable() {
+    @Test func testDefaultsWhenThereIsNoExecTable() {
         let raw = SettingsModel.rawExecConfig(from: "start-at-login = true\n")
         assertEquals(raw.inheritEnvVariables, true)
         assertEquals(raw.overriddenVars, [:])
     }
 
-    func testUnparseableConfigFallsBackToDefaults() {
+    @Test func testUnparseableConfigFallsBackToDefaults() {
         let raw = SettingsModel.rawExecConfig(from: "this is not toml [[[\n")
         assertEquals(raw.inheritEnvVariables, true)
         assertEquals(raw.overriddenVars, [:])
     }
 
-    func testRequiresVersionMigrationOnlyForLoadedV1DraftV2() throws {
+    @Test func testRequiresVersionMigrationOnlyForLoadedV1DraftV2() throws {
         let directory = try makeTemporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
         let target = directory.appending(path: "config.toml")
@@ -80,16 +81,16 @@ final class SettingsModelTest: XCTestCase {
         let model = makeModel(target: target)
 
         model.load()
-        XCTAssertFalse(model.requiresVersionMigration)
+        #expect(!model.requiresVersionMigration)
 
         model.draft.configVersion = 2
-        XCTAssertTrue(model.requiresVersionMigration)
+        #expect(model.requiresVersionMigration)
 
         model.draft.configVersion = 1
-        XCTAssertFalse(model.requiresVersionMigration)
+        #expect(!model.requiresVersionMigration)
     }
 
-    func testMigrationBacksUpOriginalAndAppliesDraftEditsToMigratedBaseline() async throws {
+    @Test func testMigrationBacksUpOriginalAndAppliesDraftEditsToMigratedBaseline() async throws {
         let directory = try makeTemporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
         let target = directory.appending(path: "config.toml")
@@ -103,19 +104,20 @@ final class SettingsModelTest: XCTestCase {
         await model.save()
 
         guard case .migrated(let backupUrl) = model.status else {
-            return XCTFail("Expected migrated status, got \(String(describing: model.status))")
+            Issue.record(Comment(rawValue: "Expected migrated status, got \(String(describing: model.status))"))
+            return
         }
-        XCTAssertEqual(backupUrl, backupUrl.absoluteURL)
-        XCTAssertEqual(backupUrl.deletingLastPathComponent(), directory)
-        XCTAssertEqual(try Data(contentsOf: backupUrl), original)
+        #expect(backupUrl == backupUrl.absoluteURL)
+        #expect(backupUrl.deletingLastPathComponent() == directory)
+        #expect(try Data(contentsOf: backupUrl) == original)
         let written = try String(contentsOf: target, encoding: .utf8)
-        XCTAssertTrue(written.contains("config-version = 2"))
-        XCTAssertTrue(written.contains("persistent-workspaces = ['two', 'one', 'assigned']"))
-        XCTAssertTrue(written.contains("start-at-login = true"))
-        XCTAssertTrue(written.contains("# untouched marker"))
+        #expect(written.contains("config-version = 2"))
+        #expect(written.contains("persistent-workspaces = ['two', 'one', 'assigned']"))
+        #expect(written.contains("start-at-login = true"))
+        #expect(written.contains("# untouched marker"))
     }
 
-    func testMigrationKeepsUserEditedPersistentWorkspaceOrder() async throws {
+    @Test func testMigrationKeepsUserEditedPersistentWorkspaceOrder() async throws {
         let directory = try makeTemporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
         let target = directory.appending(path: "config.toml")
@@ -128,10 +130,10 @@ final class SettingsModelTest: XCTestCase {
         await model.save()
 
         let written = try String(contentsOf: target, encoding: .utf8)
-        XCTAssertTrue(written.contains("persistent-workspaces = ['custom', 'two']"))
+        #expect(written.contains("persistent-workspaces = ['custom', 'two']"))
     }
 
-    func testInvalidMigrationCandidateCreatesNoBackupAndDoesNotChangeTarget() async throws {
+    @Test func testInvalidMigrationCandidateCreatesNoBackupAndDoesNotChangeTarget() async throws {
         let directory = try makeTemporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
         let target = directory.appending(path: "config.toml")
@@ -146,11 +148,11 @@ final class SettingsModelTest: XCTestCase {
         await model.save()
 
         assertIsError(model.status)
-        XCTAssertEqual(try Data(contentsOf: target), original)
-        XCTAssertEqual(try directoryEntries(in: directory), originalDirectoryEntries)
+        #expect(try Data(contentsOf: target) == original)
+        #expect(try directoryEntries(in: directory) == originalDirectoryEntries)
     }
 
-    func testBackupCreatorFailureBeforeWritingLeavesTargetAndDirectoryUnchanged() async throws {
+    @Test func testBackupCreatorFailureBeforeWritingLeavesTargetAndDirectoryUnchanged() async throws {
         let directory = try makeTemporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
         let target = directory.appending(path: "config.toml")
@@ -168,11 +170,11 @@ final class SettingsModelTest: XCTestCase {
         await model.save()
 
         assertIsError(model.status)
-        XCTAssertEqual(try Data(contentsOf: target), original)
-        XCTAssertEqual(try directoryEntries(in: directory), originalDirectoryEntries)
+        #expect(try Data(contentsOf: target) == original)
+        #expect(try directoryEntries(in: directory) == originalDirectoryEntries)
     }
 
-    func testWriteFailureAfterBackupRestoresExactOriginalBytes() async throws {
+    @Test func testWriteFailureAfterBackupRestoresExactOriginalBytes() async throws {
         let directory = try makeTemporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
         let target = directory.appending(path: "config.toml")
@@ -191,13 +193,14 @@ final class SettingsModelTest: XCTestCase {
         await model.save()
 
         assertIsError(model.status)
-        XCTAssertEqual(try Data(contentsOf: target), original)
+        #expect(try Data(contentsOf: target) == original)
         let backups = try backupUrls(in: directory)
-        XCTAssertEqual(backups.count, 1)
-        XCTAssertEqual(try Data(contentsOf: try XCTUnwrap(backups.first)), original)
+        #expect(backups.count == 1)
+        let firstBackup = try #require(backups.first)
+        #expect(try Data(contentsOf: firstBackup) == original)
     }
 
-    func testSavingUnrelatedV1EditCreatesNoBackup() async throws {
+    @Test func testSavingUnrelatedV1EditCreatesNoBackup() async throws {
         let directory = try makeTemporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
         let target = directory.appending(path: "config.toml")
@@ -208,14 +211,14 @@ final class SettingsModelTest: XCTestCase {
 
         await model.save()
 
-        XCTAssertEqual(model.status, .saved)
-        XCTAssertEqual(try backupUrls(in: directory), [])
+        #expect(model.status == .saved)
+        #expect(try backupUrls(in: directory) == [])
         let written = try String(contentsOf: target, encoding: .utf8)
-        XCTAssertFalse(written.contains("config-version = 2"))
-        XCTAssertTrue(written.contains("start-at-login = true"))
+        #expect(!(written.contains("config-version = 2")))
+        #expect(written.contains("start-at-login = true"))
     }
 
-    func testMigrationThroughSymlinkPreservesLinkTargetPermissionsAndBackupPlacement() async throws {
+    @Test func testMigrationThroughSymlinkPreservesLinkTargetPermissionsAndBackupPlacement() async throws {
         let directory = try makeTemporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
         let targetDirectory = directory.appending(path: "dotfiles", directoryHint: .isDirectory)
@@ -232,20 +235,22 @@ final class SettingsModelTest: XCTestCase {
 
         await model.save()
 
-        XCTAssertEqual(try FileManager.default.destinationOfSymbolicLink(atPath: symlink.path), target.path)
-        XCTAssertNotEqual(try Data(contentsOf: target), original)
-        XCTAssertEqual(try permissions(of: target), 0o640)
+        #expect(try FileManager.default.destinationOfSymbolicLink(atPath: symlink.path) == target.path)
+        #expect(try Data(contentsOf: target) != original)
+        #expect(try permissions(of: target) == 0o640)
         let backups = try backupUrls(in: targetDirectory)
-        XCTAssertEqual(backups.count, 1)
-        XCTAssertEqual(try Data(contentsOf: try XCTUnwrap(backups.first)), original)
-        XCTAssertEqual(try backupUrls(in: directory), [])
+        #expect(backups.count == 1)
+        let firstBackup = try #require(backups.first)
+        #expect(try Data(contentsOf: firstBackup) == original)
+        #expect(try backupUrls(in: directory) == [])
         guard case .migrated(let backupUrl) = model.status else {
-            return XCTFail("Expected migrated status, got \(String(describing: model.status))")
+            Issue.record(Comment(rawValue: "Expected migrated status, got \(String(describing: model.status))"))
+            return
         }
-        XCTAssertEqual(backupUrl.resolvingSymlinksInPath(), backups.first?.resolvingSymlinksInPath())
+        #expect(backupUrl.resolvingSymlinksInPath() == backups.first?.resolvingSymlinksInPath())
     }
 
-    func testReloadFailureSynchronizesMigratedBaselineBeforeRetry() async throws {
+    @Test func testReloadFailureSynchronizesMigratedBaselineBeforeRetry() async throws {
         let directory = try makeTemporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
         let target = directory.appending(path: "config.toml")
@@ -262,20 +267,20 @@ final class SettingsModelTest: XCTestCase {
         await model.save()
 
         let message = assertIsError(model.status)
-        let backup = try XCTUnwrap(backupUrls(in: directory).first)
-        XCTAssertTrue(message.contains(backup.resolvingSymlinksInPath().path))
-        XCTAssertNotEqual(try Data(contentsOf: target), original)
-        XCTAssertEqual(try Data(contentsOf: backup), original)
-        XCTAssertFalse(model.requiresVersionMigration)
+        let backup = try #require(try backupUrls(in: directory).first)
+        #expect(message.contains(backup.resolvingSymlinksInPath().path))
+        #expect(try Data(contentsOf: target) != original)
+        #expect(try Data(contentsOf: backup) == original)
+        #expect(!model.requiresVersionMigration)
 
         await model.save()
 
-        XCTAssertEqual(model.status, .saved)
-        XCTAssertEqual(reloadAttempts, 2)
-        XCTAssertEqual(try backupUrls(in: directory), [backup])
+        #expect(model.status == .saved)
+        #expect(reloadAttempts == 2)
+        #expect(try backupUrls(in: directory) == [backup])
     }
 
-    func testCandidatePermissionFailureLeavesOriginalBytesAndModeUntouched() throws {
+    @Test func testCandidatePermissionFailureLeavesOriginalBytesAndModeUntouched() throws {
         let directory = try makeTemporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
         let target = directory.appending(path: "config.toml")
@@ -283,20 +288,20 @@ final class SettingsModelTest: XCTestCase {
         try original.write(to: target)
         try FileManager.default.setAttributes([.posixPermissions: 0o640], ofItemAtPath: target.path)
 
-        XCTAssertThrowsError(
+        #expect(throws: (any Error).self) {
             try SettingsModel.writeCandidateAtomically(
                 Data("candidate".utf8),
                 to: target,
                 permissions: 0o640,
                 applyPermissions: { _, _ in throw ExpectedFailure.permissions },
-            ),
-        )
+            )
+        }
 
-        XCTAssertEqual(try Data(contentsOf: target), original)
-        XCTAssertEqual(try permissions(of: target), 0o640)
+        #expect(try Data(contentsOf: target) == original)
+        #expect(try permissions(of: target) == 0o640)
     }
 
-    func testCandidateWriteFailureLeavesOriginalBytesAndModeUntouched() throws {
+    @Test func testCandidateWriteFailureLeavesOriginalBytesAndModeUntouched() throws {
         let directory = try makeTemporaryDirectory()
         defer {
             try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: directory.path)
@@ -308,16 +313,16 @@ final class SettingsModelTest: XCTestCase {
         try FileManager.default.setAttributes([.posixPermissions: 0o640], ofItemAtPath: target.path)
         try FileManager.default.setAttributes([.posixPermissions: 0o500], ofItemAtPath: directory.path)
 
-        XCTAssertThrowsError(
+        #expect(throws: (any Error).self) {
             try SettingsModel.writeCandidateAtomically(
                 Data("candidate".utf8),
                 to: target,
                 permissions: 0o640,
-            ),
-        )
+            )
+        }
 
-        XCTAssertEqual(try Data(contentsOf: target), original)
-        XCTAssertEqual(try permissions(of: target), 0o640)
+        #expect(try Data(contentsOf: target) == original)
+        #expect(try permissions(of: target) == 0o640)
     }
 
     private var v1Config: String {
@@ -367,11 +372,10 @@ final class SettingsModelTest: XCTestCase {
     @discardableResult
     private func assertIsError(
         _ status: SettingsStatus?,
-        file: StaticString = #filePath,
-        line: UInt = #line,
+        sourceLocation: SourceLocation = #_sourceLocation,
     ) -> String {
         guard case .error(let message) = status else {
-            XCTFail("Expected error status, got \(String(describing: status))", file: file, line: line)
+            Issue.record(Comment(rawValue: "Expected error status, got \(String(describing: status))"), sourceLocation: sourceLocation)
             return ""
         }
         return message
@@ -379,6 +383,6 @@ final class SettingsModelTest: XCTestCase {
 
     private func permissions(of url: URL) throws -> Int {
         let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
-        return try XCTUnwrap(attributes[.posixPermissions] as? NSNumber).intValue
+        return try #require(attributes[.posixPermissions] as? NSNumber).intValue
     }
 }

@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 cd "$(dirname "$0")/.."
 source ./script/setup.sh
 
@@ -44,33 +44,44 @@ fi
 
 ./script/generate.sh
 ./script/check-uncommitted-files.sh
-./script/generate.sh --build-version "$build_version" --codesign-identity "$codesign_identity" --generate-git-hash
 
-swift build -c release --arch arm64 --arch x86_64 --product aerospace-edge -Xswiftc -warnings-as-errors # CLI
+# Version and git hash are embedded as a Mach-O section (read by Sources/Common/buildInfo.swift),
+# so the build no longer rewrites tracked sources and leaves the git tree clean even on failure.
+build_info_file="$PWD/.build-info.txt"
+printf '%s\n%s\n%s\n' "$build_version" "$(git rev-parse HEAD)" "$(git rev-parse --short HEAD)" > "$build_info_file"
 
-# todo: make xcodebuild use the same toolchain as swift
-# toolchain="$(plutil -extract CFBundleIdentifier raw ~/Library/Developer/Toolchains/swift-6.1-RELEASE.xctoolchain/Info.plist)"
-# xcodebuild -toolchain "$toolchain" \
-# Unfortunately, Xcode 16 fails with:
-#     2025-05-05 15:51:15.618 xcodebuild[4633:13690815] Writing error result bundle to /var/folders/s1/17k6s3xd7nb5mv42nx0sd0800000gn/T/ResultBundle_2025-05-05_15-51-0015.xcresult
-#     xcodebuild: error: Could not resolve package dependencies:
-#       <unknown>:0: warning: legacy driver is now deprecated; consider avoiding specifying '-disallow-use-new-driver'
-#     <unknown>:0: error: unable to execute command: <unknown>
+swift_build_cli=(build -c release --arch arm64 --arch x86_64 --product aerospace-edge)
+swift "${swift_build_cli[@]}" -Xswiftc -warnings-as-errors \
+    -Xlinker -sectcreate \
+    -Xlinker __TEXT \
+    -Xlinker __aero_build \
+    -Xlinker "$build_info_file"
+cli_bin_path="$(swift "${swift_build_cli[@]}" --show-bin-path)"
 
 rm -rf .release && mkdir .release
 
-xcode_configuration="Release"
-xcodebuild -version
-xcodebuild-pretty .release/xcodebuild.log clean build \
-    -scheme AeroSpace \
-    -destination "generic/platform=macOS" \
-    -configuration "$xcode_configuration" \
-    -derivedDataPath .xcode-build
+cd ./xcode
+    xcode_configuration="Release"
+    xcodebuild -version
+    xcodebuild-pretty ../.release/xcodebuild.log clean build \
+        -scheme AeroSpace \
+        -destination "generic/platform=macOS" \
+        -configuration "$xcode_configuration" \
+        -derivedDataPath .xcode-build \
+        MARKETING_VERSION="$build_version" \
+        AEROSPACE_CODE_SIGN_IDENTITY="$codesign_identity" \
+        AEROSPACE_BUILD_INFO_LDFLAGS="-sectcreate __TEXT __aero_build $build_info_file"
+cd -
 
-git checkout .
+cp -r "xcode/.xcode-build/Build/Products/$xcode_configuration/AeroSpace-edge.app" .release
+cp -r "$cli_bin_path/aerospace-edge" .release
 
-cp -r ".xcode-build/Build/Products/$xcode_configuration/AeroSpace-edge.app" .release
-cp -r .build/apple/Products/Release/aerospace-edge .release
+# Binary reproducibility: strip non-portable rpaths
+# https://github.com/swiftlang/swift-package-manager/issues/10760
+xcrun objdump --macho --rpaths --no-leading-headers --arch all .release/aerospace-edge | grep -vE '^(@|/usr/lib/swift$)' | sort -u |
+    while IFS= read -r rpath; do
+        install_name_tool -delete_rpath "$rpath" .release/aerospace-edge
+    done
 
 ################
 ### SIGN CLI ###
@@ -82,61 +93,9 @@ codesign -s "$codesign_identity" .release/aerospace-edge
 ### VALIDATE ###
 ################
 
-# Metadata.appintents is emitted by Xcode's App Intents metadata processor from the intents in
-# Sources/AeroSpaceApp. It is what makes the commands visible to Shortcuts, Spotlight and Focus
-# filters, so its presence here doubles as the build-time check that they were extracted at all.
-expected_layout=$(cat <<EOF
-.release/AeroSpace-edge.app
-.release/AeroSpace-edge.app/Contents
-.release/AeroSpace-edge.app/Contents/_CodeSignature
-.release/AeroSpace-edge.app/Contents/_CodeSignature/CodeResources
-.release/AeroSpace-edge.app/Contents/MacOS
-.release/AeroSpace-edge.app/Contents/MacOS/AeroSpace-edge
-.release/AeroSpace-edge.app/Contents/Resources
-.release/AeroSpace-edge.app/Contents/Resources/default-config.toml
-.release/AeroSpace-edge.app/Contents/Resources/Metadata.appintents
-.release/AeroSpace-edge.app/Contents/Resources/Metadata.appintents/version.json
-.release/AeroSpace-edge.app/Contents/Resources/Metadata.appintents/extract.actionsdata
-.release/AeroSpace-edge.app/Contents/Resources/AppIcon.icns
-.release/AeroSpace-edge.app/Contents/Resources/Assets.car
-.release/AeroSpace-edge.app/Contents/Info.plist
-.release/AeroSpace-edge.app/Contents/PkgInfo
-EOF
-)
+./script/validate-release-binaries.sh || exit 1
 
-if test "$expected_layout" != "$(find .release/AeroSpace-edge.app)"; then
-    echo "!!! Expect/Actual layout don't match !!!"
-    find .release/AeroSpace-edge.app
-    exit 1
-fi
-
-check-universal-binary() {
-    local architectures
-    architectures="$(lipo -archs "$1")"
-    if [[ " $architectures " != *" arm64 "* || " $architectures " != *" x86_64 "* ]]; then
-        echo "$1 is not a universal binary"
-        exit 1
-    fi
-}
-
-check-contains-hash() {
-    hash=$(git rev-parse HEAD)
-    if ! strings "$1" | grep --fixed-string "$hash" > /dev/null; then
-        echo "$1 doesn't contain $hash"
-        exit 1
-    fi
-}
-
-check-universal-binary .release/AeroSpace-edge.app/Contents/MacOS/AeroSpace-edge
-check-universal-binary .release/aerospace-edge
-
-check-contains-hash .release/AeroSpace-edge.app/Contents/MacOS/AeroSpace-edge
-check-contains-hash .release/aerospace-edge
-
-codesign -v .release/AeroSpace-edge.app
-codesign -v .release/aerospace-edge
-
-# `codesign -v` passes happily on an ad-hoc signature, so it cannot catch the case above on its own
+# `codesign -v` (in validate-release-binaries.sh) passes happily on an ad-hoc signature, so it cannot catch the case above on its own
 # (this script has no `set -e` either: a failed `codesign -s` would otherwise sail through). Check
 # what actually matters to TCC instead — the designated requirement of the shipped artifacts.
 check-designated-requirement() {

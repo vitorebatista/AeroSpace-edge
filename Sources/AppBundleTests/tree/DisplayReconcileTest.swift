@@ -1,64 +1,69 @@
 @testable import AppBundle
 import Common
 import Foundation
-import XCTest
+import Testing
 
 /// The focused workspace must stay visible after monitors are added, removed or moved
 @MainActor
-final class DisplayReconcileTest: XCTestCase {
-    override func setUp() async throws { setUpWorkspacesForTests() }
+@Suite(.serializedGlobally)
+struct DisplayReconcileTest {
+    init() { setUpWorkspacesForTests() }
 
-    // Leave no test monitors or focus behind for other test classes
-    override func tearDown() async throws {
+    // Leave no test monitors or focus behind for other test suites (XCTest's tearDown before the swift-testing migration)
+    private func tearDown() {
         setTestMonitors([])
         gcMonitors()
         setTestMonitors(nil)
         resetFocusForTests()
     }
 
-    func testFocusedForceAssignedWorkspaceStaysVisibleWhenMonitorDisconnects() {
+    @Test func testFocusedForceAssignedWorkspaceStaysVisibleWhenMonitorDisconnects() {
+        defer { tearDown() }
         seedOpenThreeMonitors(forceAssignNumerics: true)
         assertTrue(Workspace.get(byName: "2").focusWorkspace())
         applyClosedTwoMonitors()
         gcMonitors()
 
-        assertEquals(focus.workspace.name, "2")
-        assertEquals(closedRight().activeWorkspace.name, "2")
+        assertEquals(globalFocus.workspace.name, "2")
+        assertEquals(closedRight().visibleWorkspace.name, "2")
         assertFalse(Workspace.get(byName: "R").isVisible)
         assertReconcileInvariants()
         gcMonitors()
-        assertEquals(closedRight().activeWorkspace.name, "2")
+        assertEquals(closedRight().visibleWorkspace.name, "2")
         assertFalse(Workspace.get(byName: "R").isVisible)
         assertReconcileInvariants()
     }
 
-    func testFocusedWorkspaceThatStaysVisibleIsNotMoved() {
+    @Test func testFocusedWorkspaceThatStaysVisibleIsNotMoved() {
+        defer { tearDown() }
         seedOpenThreeMonitors(forceAssignNumerics: false)
         assertTrue(Workspace.get(byName: "2").focusWorkspace())
         applyClosedTwoMonitors()
         gcMonitors()
 
-        assertEquals(focus.workspace.name, "2")
-        assertEquals(closedLeft().activeWorkspace.name, "2")
-        assertEquals(closedRight().activeWorkspace.name, "R")
+        assertEquals(globalFocus.workspace.name, "2")
+        assertEquals(closedLeft().visibleWorkspace.name, "2")
+        assertEquals(closedRight().visibleWorkspace.name, "R")
         assertReconcileInvariants()
     }
 
-    func testFocusedWorkspaceWinsWhenTwoWorkspacesMapToOneMonitor() {
+    @Test func testFocusedWorkspaceWinsWhenTwoWorkspacesMapToOneMonitor() {
+        defer { tearDown() }
         seedOpenThreeMonitors(forceAssignNumerics: false)
         assertTrue(Workspace.get(byName: "1").focusWorkspace())
         applyClosedTwoMonitors()
         gcMonitors()
 
-        assertEquals(focus.workspace.name, "1")
-        assertEquals(closedLeft().activeWorkspace.name, "1")
+        assertEquals(globalFocus.workspace.name, "1")
+        assertEquals(closedLeft().visibleWorkspace.name, "1")
         assertFalse(Workspace.get(byName: "2").isVisible)
-        assertEquals(closedRight().activeWorkspace.name, "R")
+        assertEquals(closedRight().visibleWorkspace.name, "R")
         assertTrue(Workspace.get(byName: "R").isVisible)
         assertReconcileInvariants()
     }
 
-    func testFocusInitializationAfterAllMonitorsDisconnect() {
+    @Test func testFocusInitializationAfterAllMonitorsDisconnect() {
+        defer { tearDown() }
         seedOpenThreeMonitors(forceAssignNumerics: true)
         setTestMonitors([])
         gcMonitors()
@@ -72,19 +77,20 @@ final class DisplayReconcileTest: XCTestCase {
         setTestMonitors([])
         gcMonitors()
         setTestMonitors([closedLeft()])
-        let workspace = focus.workspace
+        let workspace = globalFocus.workspace
         assertNotNil(initializedFocusWorkspaceName)
         assertTrue(workspace.isVisible)
-        assertEquals(closedLeft().activeWorkspace.name, workspace.name)
+        assertEquals(closedLeft().visibleWorkspace.name, workspace.name)
         assertReconcileInvariants()
     }
 
-    func testFocusedWorkspaceStaysVisibleWhenMonitorsMove() {
+    @Test func testFocusedWorkspaceStaysVisibleWhenMonitorsMove() {
+        defer { tearDown() }
         config.persistentWorkspaces = ["1", "R"]
         setTestMonitors([closedLeft(), closedRight()])
         gcMonitors()
-        check(closedLeft().setActiveWorkspace(Workspace.get(byName: "1")))
-        check(closedRight().setActiveWorkspace(Workspace.get(byName: "R")))
+        check(closedLeft().setVisibleWorkspace(Workspace.get(byName: "1")))
+        check(closedRight().setVisibleWorkspace(Workspace.get(byName: "R")))
         assertTrue(Workspace.get(byName: "1").focusWorkspace())
 
         let shiftedLeft = testMonitor(
@@ -107,17 +113,18 @@ final class DisplayReconcileTest: XCTestCase {
         )
         setTestMonitors([shiftedLeft, shiftedRight])
         gcMonitors()
-        assertEquals(closedLeft().activeWorkspace.name, "1")
+        assertEquals(closedLeft().visibleWorkspace.name, "1")
 
-        assertEquals(shiftedLeft.activeWorkspace.name, "1")
+        assertEquals(shiftedLeft.visibleWorkspace.name, "1")
         assertTrue(Workspace.get(byName: "1").isVisible)
-        assertEquals(shiftedRight.activeWorkspace.name, "R")
+        assertEquals(shiftedRight.visibleWorkspace.name, "R")
         assertReconcileInvariants()
     }
 
     // Fork: the focused workspace is persisted the moment focus changes (fork #71). Reconciliation only re-shows the
     // focused workspace; it never changes focus, so the persisted name must neither be rewritten nor fall out of view
-    func testReconcileDoesNotRewritePersistedFocusedWorkspace() {
+    @Test func testReconcileDoesNotRewritePersistedFocusedWorkspace() {
+        defer { tearDown() }
         UserDefaults.standard.removeObject(forKey: focusedWorkspaceDefaultsKey)
         defer { UserDefaults.standard.removeObject(forKey: focusedWorkspaceDefaultsKey) }
         seedOpenThreeMonitors(forceAssignNumerics: true)
@@ -129,24 +136,25 @@ final class DisplayReconcileTest: XCTestCase {
         gcMonitors()
 
         assertEquals(storedFocusedWorkspace(), "stale-marker")
-        assertEquals(focus.workspace.name, "2")
+        assertEquals(globalFocus.workspace.name, "2")
         assertTrue(Workspace.get(byName: "2").isVisible)
         assertReconcileInvariants()
     }
 
-    func testNoMonitorsLeavesNoVisibleWorkspaces() {
+    @Test func testNoMonitorsLeavesNoVisibleWorkspaces() {
+        defer { tearDown() }
         seedOpenThreeMonitors(forceAssignNumerics: true)
         assertTrue(Workspace.get(byName: "2").focusWorkspace())
         setTestMonitors([])
         gcMonitors()
         assertEquals(initializedFocusWorkspaceName, "2")
-        assertEquals(focus.workspace.name, "2")
+        assertEquals(globalFocus.workspace.name, "2")
         assertFalse(Workspace.get(byName: "2").isVisible)
         assertEquals(visibleSnapshot().count, 0)
     }
 }
 
-private struct TestMonitor: Monitor {
+private struct TestMonitor: MonitorInfo {
     let monitorAppKitNsScreenScreensId: Int
     let name: String
     let rect: Rect
@@ -157,7 +165,7 @@ private struct TestMonitor: Monitor {
 }
 
 @MainActor
-private func setTestMonitors(_ monitors: [Monitor]?) {
+private func setTestMonitors(_ monitors: [MonitorInfo]?) {
     unsafe monitorsForTests = monitors
 }
 
@@ -170,7 +178,7 @@ private func testMonitor(
     width: CGFloat,
     height: CGFloat,
     isMain: Bool,
-) -> Monitor {
+) -> MonitorInfo {
     let rect = Rect(topLeftX: topLeftX, topLeftY: topLeftY, width: width, height: height)
     return TestMonitor(
         monitorAppKitNsScreenScreensId: id,
@@ -182,27 +190,27 @@ private func testMonitor(
 }
 
 @MainActor
-private func openLeft() -> Monitor {
+private func openLeft() -> MonitorInfo {
     testMonitor(name: "Left", id: 1, topLeftX: -1920, topLeftY: -1080, width: 1920, height: 1080, isMain: false)
 }
 
 @MainActor
-private func openLaptop() -> Monitor {
+private func openLaptop() -> MonitorInfo {
     testMonitor(name: "Laptop", id: 2, topLeftX: 0, topLeftY: 0, width: 1728, height: 1117, isMain: true)
 }
 
 @MainActor
-private func openRight() -> Monitor {
+private func openRight() -> MonitorInfo {
     testMonitor(name: "Right", id: 3, topLeftX: 1728, topLeftY: -1080, width: 1920, height: 1080, isMain: false)
 }
 
 @MainActor
-private func closedLeft() -> Monitor {
+private func closedLeft() -> MonitorInfo {
     testMonitor(name: "Left", id: 1, topLeftX: 0, topLeftY: 0, width: 1920, height: 1080, isMain: true)
 }
 
 @MainActor
-private func closedRight() -> Monitor {
+private func closedRight() -> MonitorInfo {
     testMonitor(name: "Right", id: 2, topLeftX: 1920, topLeftY: 0, width: 1920, height: 1080, isMain: false)
 }
 
@@ -217,9 +225,9 @@ private func seedOpenThreeMonitors(forceAssignNumerics: Bool) {
     }
     setTestMonitors([openLeft(), openLaptop(), openRight()])
     gcMonitors()
-    check(openLeft().setActiveWorkspace(Workspace.get(byName: "1")))
-    check(openLaptop().setActiveWorkspace(Workspace.get(byName: "2")))
-    check(openRight().setActiveWorkspace(Workspace.get(byName: "R")))
+    check(openLeft().setVisibleWorkspace(Workspace.get(byName: "1")))
+    check(openLaptop().setVisibleWorkspace(Workspace.get(byName: "2")))
+    check(openRight().setVisibleWorkspace(Workspace.get(byName: "R")))
 }
 
 @MainActor
@@ -231,17 +239,17 @@ private func applyClosedTwoMonitors() {
 private func visibleSnapshot() -> [String] {
     Workspace.all
         .filter(\.isVisible)
-        .map { "\($0.name)@\($0.workspaceMonitor.rect.topLeftX),\($0.workspaceMonitor.rect.topLeftY)" }
+        .map { "\($0.name)@\($0.workspaceMonitorInfo.rect.topLeftX),\($0.workspaceMonitorInfo.rect.topLeftY)" }
         .sorted()
 }
 
 @MainActor
 private func assertReconcileInvariants() {
     let visibles = Workspace.all.filter(\.isVisible)
-    let origins = visibles.map { "\($0.workspaceMonitor.rect.topLeftX),\($0.workspaceMonitor.rect.topLeftY)" }
+    let origins = visibles.map { "\($0.workspaceMonitorInfo.rect.topLeftX),\($0.workspaceMonitorInfo.rect.topLeftY)" }
     assertEquals(Set(origins).count, origins.count)
-    assertEquals(visibles.count, monitors.count)
-    for monitor in monitors {
-        assertEquals(visibles.count(where: { $0.workspaceMonitor.rect.topLeftCorner == monitor.rect.topLeftCorner }), 1)
+    assertEquals(visibles.count, globalSortedMonitorInfos.count)
+    for monitor in globalSortedMonitorInfos {
+        assertEquals(visibles.count(where: { $0.workspaceMonitorInfo.rect.topLeftCorner == monitor.rect.topLeftCorner }), 1)
     }
 }

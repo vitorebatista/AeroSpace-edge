@@ -130,7 +130,7 @@ struct NativeFocusRaceProtection {
     }
 }
 
-@MainActor private var lastKnownNativeFocusedWindowId: UInt32? = nil
+@MainActor private var lastKnownNativeFocusedWindowId: OpaqueWindowId? = nil
 @MainActor private var raceProtection = NativeFocusRaceProtection()
 @MainActor private var deferredNativeFocusTask: Task<(), Never>? = nil
 
@@ -162,7 +162,7 @@ func noteUserClick() {
 @MainActor
 private func scheduleDeferredNativeFocus(after delay: Duration) {
     deferredNativeFocusTask?.cancel()
-    deferredNativeFocusTask = Task { @MainActor in
+    deferredNativeFocusTask = Task.startUnstructured { @MainActor in
         do {
             try await Task.sleep(for: delay)
         } catch {
@@ -176,7 +176,7 @@ private func scheduleDeferredNativeFocus(after delay: Duration) {
 
 @MainActor
 private func updateLastNativeFocusedWindow(_ window: Window?) {
-    (window as? MacWindow)?.macAppUnsafe.lastNativeFocusedWindowId = window?.windowId
+    (window as? MacWindow)?.macAppUnsafe.lastFocusedNativeWindowOpaqueId = window?.windowId
 }
 
 /// The data should flow (from nativeFocused to focused) and
@@ -190,10 +190,10 @@ private func updateLastNativeFocusedWindow(_ window: Window?) {
     // belongs to another workspace take focus away. (fork PR #21 — layout sticky)
     if let macWindow = nativeFocused as? MacWindow,
        macWindow.isSticky,
-       macWindow.visualWorkspace != focus.workspace
+       macWindow.visualWorkspace != globalFocus.workspace
     {
         lastKnownNativeFocusedWindowId = nativeFocused?.windowId
-        macWindow.macAppUnsafe.lastNativeFocusedWindowId = nativeFocused?.windowId
+        macWindow.macAppUnsafe.lastFocusedNativeWindowOpaqueId = nativeFocused?.windowId
         return
     }
     guard nativeFocused?.windowId != lastKnownNativeFocusedWindowId else {
@@ -208,6 +208,7 @@ private func updateLastNativeFocusedWindow(_ window: Window?) {
         return
     }
 
+    let focus = globalFocus
     let currentWorkspaceName = focus.workspace.name
     let nativeWorkspaceName = nativeWorkspace.name
     let appPid = nativeFocused.app.pid

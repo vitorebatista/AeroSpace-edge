@@ -1,9 +1,11 @@
 @testable import AppBundle
 import Common
-import XCTest
+import Testing
 
-final class NativeFocusTest: XCTestCase {
-    func testPreCancelledJobRunsNoActions() {
+@MainActor
+@Suite(.serializedGlobally)
+struct NativeFocusTest {
+    @Test func testPreCancelledJobRunsNoActions() {
         let job = RunLoopJob()
         job.cancel()
         var actions: [String] = []
@@ -20,7 +22,7 @@ final class NativeFocusTest: XCTestCase {
         assertEquals(actions, [])
     }
 
-    func testCancellationDuringSetMainSkipsRaiseAndActivate() {
+    @Test func testCancellationDuringSetMainSkipsRaiseAndActivate() {
         let job = RunLoopJob()
         var actions: [String] = []
 
@@ -39,7 +41,7 @@ final class NativeFocusTest: XCTestCase {
         assertEquals(actions, ["setMain"])
     }
 
-    func testCancellationDuringRaiseSkipsActivate() {
+    @Test func testCancellationDuringRaiseSkipsActivate() {
         let job = RunLoopJob()
         var actions: [String] = []
 
@@ -58,7 +60,7 @@ final class NativeFocusTest: XCTestCase {
         assertEquals(actions, ["setMain", "raise"])
     }
 
-    func testUncancelledJobRunsActionsOnceInOrder() throws {
+    @Test func testUncancelledJobRunsActionsOnceInOrder() throws {
         let job = RunLoopJob()
         var actions: [String] = []
 
@@ -72,7 +74,7 @@ final class NativeFocusTest: XCTestCase {
         assertEquals(actions, ["setMain", "raise", "activate"])
     }
 
-    func testSupersededJobStopsAndNewJobCompletes() throws {
+    @Test func testSupersededJobStopsAndNewJobCompletes() throws {
         let firstJob = RunLoopJob()
         let secondJob = RunLoopJob()
         var actions: [String] = []
@@ -100,17 +102,16 @@ final class NativeFocusTest: XCTestCase {
     }
 
     private func assertCancellation(
-        file: String = #filePath,
-        line: Int = #line,
+        sourceLocation: SourceLocation = #_sourceLocation,
         _ body: () throws -> Void,
     ) {
         do {
             try body()
-            failExpectedActual("CancellationError", "no error thrown", file: file, line: line)
+            failExpectedActual("CancellationError", "no error thrown", sourceLocation: sourceLocation)
         } catch is CancellationError {
             // expected
         } catch {
-            failExpectedActual("CancellationError", error, file: file, line: line)
+            failExpectedActual("CancellationError", error, sourceLocation: sourceLocation)
         }
     }
 }

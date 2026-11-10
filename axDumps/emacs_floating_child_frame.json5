@@ -29,21 +29,21 @@
   "Aero.AXApp" : {
     "AXExtrasMenuBar" : null,
     "AXFocusedUIElement" : null,
-    "AXFocusedWindow" : "AXUIElement(AxWindowId=11963, title=\"Emacs\", role=\"AXWindow\", subrole=\"AXStandardWindow\")",
+    "AXFocusedWindow" : "AXUIElement(windowId_native=11963, title=\"Emacs\", role=\"AXWindow\", subrole=\"AXStandardWindow\")",
     "AXFrame" : null,
     "AXFrontmost" : 1,
     "AXFunctionRowTopLevelElements" : [
 
     ],
-    "AXMainWindow" : "AXUIElement(AxWindowId=11963, title=\"Emacs\", role=\"AXWindow\", subrole=\"AXStandardWindow\")",
+    "AXMainWindow" : "AXUIElement(windowId_native=11963, title=\"Emacs\", role=\"AXWindow\", subrole=\"AXStandardWindow\")",
     "AXMenuBar" : "<AXUIElement 0x6000012345b0> {pid=55123}",
     "AXPosition" : null,
     "AXRole" : "AXApplication",
     "AXSize" : null,
     "AXTitle" : "Emacs",
     "AXWindows" : [
-      "AXUIElement(AxWindowId=11963, title=\"Emacs\", role=\"AXWindow\", subrole=\"AXStandardWindow\")",
-      "AXUIElement(AxWindowId=11964, title=\"CodexChildFrame\", role=\"AXWindow\", subrole=\"AXFloatingWindow\")"
+      "AXUIElement(windowId_native=11963, title=\"Emacs\", role=\"AXWindow\", subrole=\"AXStandardWindow\")",
+      "AXUIElement(windowId_native=11964, title=\"CodexChildFrame\", role=\"AXWindow\", subrole=\"AXFloatingWindow\")"
     ],
     "Aero.AxIgnored" : "AXChildren, AXChildrenInNavigationOrder, AXEnhancedUserInterface, AXPreferredLanguage, AXRoleDescription, AXHidden"
   },
@@ -52,7 +52,7 @@
   "Aero.App.nsApp.execPath" : "file:///Applications/Emacs.app/Contents/MacOS/Emacs",
   "Aero.App.pid" : 55123,
   "Aero.AxIgnored" : "AXChildrenInNavigationOrder, AXChildren, AXRoleDescription",
-  "Aero.axWindowId" : 11964,
+  "Aero.windowId_native" : 11964,
   "Aero.AxUiElementWindowType_isDialogHeuristic" : false,
   "Aero.AxUiElementWindowType" : "popup",
   "Aero.on-window-detected" : [

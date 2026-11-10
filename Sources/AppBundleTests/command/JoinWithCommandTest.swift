@@ -1,19 +1,20 @@
 @testable import AppBundle
 import Common
-import XCTest
+import Testing
 
 @MainActor
-final class JoinWithCommandTest: XCTestCase {
-    override func setUp() async throws { setUpWorkspacesForTests() }
+@Suite(.serializedGlobally)
+struct JoinWithCommandTest {
+    init() { setUpWorkspacesForTests() }
 
-    func testMoveIn() async throws {
+    @Test func testMoveIn() async {
         let root = Workspace.get(byName: name).rootTilingContainer.apply {
             TestWindow.new(id: 0, parent: $0)
             assertEquals(TestWindow.new(id: 1, parent: $0).focusWindow(), true)
             TestWindow.new(id: 2, parent: $0)
         }
 
-        try await JoinWithCommand(args: JoinWithCmdArgs(rawArgs: [], direction: .right)).run(.defaultEnv, .emptyStdin)
+        await parseCommand("join-with right").cmdOrDie.run(.defaultEnv, .emptyStdin)
         assertEquals(root.layoutDescription, .h_tiles([
             .window(0),
             .v_tiles([

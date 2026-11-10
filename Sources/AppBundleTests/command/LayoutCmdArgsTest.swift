@@ -1,21 +1,23 @@
 @testable import AppBundle
 import Common
-import XCTest
+import Testing
 
-final class LayoutCmdArgsTest: XCTestCase {
-    func testParseSticky() {
-        let cmd = parseCommand("layout sticky").cmdOrDie as! LayoutCommand
+@MainActor
+@Suite(.serializedGlobally)
+struct LayoutCmdArgsTest {
+    @Test func testParseSticky() {
+        let cmd = parseCommand("layout sticky").singleCmdOrNil as! LayoutCommand
         assertEquals(cmd.args.toggleBetween.val, [.sticky])
     }
 
-    func testParseStickyAmongOthers() {
-        let cmd = parseCommand("layout sticky floating").cmdOrDie as! LayoutCommand
+    @Test func testParseStickyAmongOthers() {
+        let cmd = parseCommand("layout sticky floating").singleCmdOrNil as! LayoutCommand
         assertEquals(cmd.args.toggleBetween.val, [.sticky, .floating])
     }
 
-    func testParseUnknownLayout() {
+    @Test func testParseUnknownLayout() {
         switch parseCommand("layout bogus") {
-            case .cmd, .help: XCTFail("Expected failure")
+            case .cmd, .help: Issue.record(Comment(rawValue: "Expected failure"))
             case .failure: break
         }
     }

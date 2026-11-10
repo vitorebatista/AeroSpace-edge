@@ -192,9 +192,13 @@ aerospace-edge --version   # client and server should report the same 1.x versio
 
 [<code>aerospace-edge debug-windows</code><span>Interactive command to record Accessibility API debug information to create bug reports</span>](commands/debug-windows.md)
 
+[<code>aerospace-edge echo</code><span>Print arguments and interpolation variables to stdout</span>](commands/echo.md)
+
 [<code>aerospace-edge enable-normalization</code><span>Set or clear a per-workspace override for a refresh-time normalization</span>](commands/enable-normalization.md)
 
 [<code>aerospace-edge enable</code><span>Temporarily disable window management</span>](commands/enable.md)
+
+[<code>aerospace-edge eval</code><span>Send multiple commands to AeroSpace at once</span>](commands/eval.md)
 
 [<code>aerospace-edge exec-and-forget</code><span>Run /bin/bash -c '&lt;bash-script&gt;'</span>](commands/exec-and-forget.md)
 
@@ -212,7 +216,7 @@ aerospace-edge --version   # client and server should report the same 1.x versio
 
 [<code>aerospace-edge join-with</code><span>Put the focused window and the nearest node in the specified direction under a common parent container</span>](commands/join-with.md)
 
-[<code>aerospace-edge layout</code><span>Change layout of the focused window or workspace root to the given layout</span>](commands/layout.md)
+[<code>aerospace-edge layout</code><span>Change layout of the focused node to the given layout</span>](commands/layout.md)
 
 [<code>aerospace-edge list-apps</code><span>Print the list of running applications that appears in the Dock and may have a user interface</span>](commands/list-apps.md)
 
@@ -246,6 +250,8 @@ aerospace-edge --version   # client and server should report the same 1.x versio
 
 [<code>aerospace-edge resize</code><span>Resize the focused window</span>](commands/resize.md)
 
+[<code>aerospace-edge run-callback</code><span>Run AeroSpace config callbacks on demand</span>](commands/run-callback.md)
+
 [<code>aerospace-edge split</code><span>Split focused window</span>](commands/split.md)
 
 [<code>aerospace-edge subscribe</code><span>Subscribe to AeroSpace events and receive notifications via socket</span>](commands/subscribe.md)
@@ -253,6 +259,8 @@ aerospace-edge --version   # client and server should report the same 1.x versio
 [<code>aerospace-edge summon-workspace</code><span>Move the requested workspace to the focused monitor</span>](commands/summon-workspace.md)
 
 [<code>aerospace-edge swap</code><span>Swaps the focused window with another window</span>](commands/swap.md)
+
+[<code>aerospace-edge test-not</code><span>Negative condition evaluation utility</span>](commands/test-not.md)
 
 [<code>aerospace-edge test</code><span>Condition evaluation utility</span>](commands/test.md)
 

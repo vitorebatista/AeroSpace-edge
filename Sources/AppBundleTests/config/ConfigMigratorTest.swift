@@ -1,59 +1,62 @@
 @testable import AppBundle
 import Common
 import Foundation
-import XCTest
+import Testing
 
 @MainActor
-final class ConfigMigratorTest: XCTestCase {
+@Suite(.serializedGlobally)
+struct ConfigMigratorTest {
     private typealias Draft = ConfigTomlWriter.ConfigDraft
 
-    func testMigrateComprehensiveV1FixturePreservesEveryDraftFieldAndSourceBlock() throws {
+    @Test func testMigrateComprehensiveV1FixturePreservesEveryDraftFieldAndSourceBlock() throws {
         try assertFixtureMigration(named: "config-v1-comprehensive")
     }
 
-    func testMigrateComprehensiveV1FixturePreservesWorkspaceAndStartupWindowMatchers() throws {
+    @Test func testMigrateComprehensiveV1FixturePreservesWorkspaceAndStartupWindowMatchers() throws {
         let sourceText = try String(
             contentsOf: projectRoot.appending(component: "Sources/AppBundleTests/config/fixtures/config-v1-comprehensive.toml"),
             encoding: .utf8,
         )
         let source = parseConfig(sourceText)
-        XCTAssertEqual(source.errors, [])
+        #expect(source.errors == [])
         guard source.errors.isEmpty else { return }
 
         let candidate = migrate(sourceText)
         let migrated = parseConfig(candidate.text)
-        XCTAssertEqual(migrated.errors, [])
+        #expect(migrated.errors == [])
         guard migrated.errors.isEmpty else { return }
 
         let sourceMatchers = source.config.onWindowDetected.map(\.matcher)
         let migratedMatchers = migrated.config.onWindowDetected.map(\.matcher)
-        XCTAssertTrue(sourceMatchers.contains { $0.workspace == "fixture-workspace" })
-        XCTAssertTrue(sourceMatchers.contains { $0.duringAeroSpaceStartup == true })
-        XCTAssertTrue(migratedMatchers.contains { $0.workspace == "fixture-workspace" })
-        XCTAssertTrue(migratedMatchers.contains { $0.duringAeroSpaceStartup == true })
+        #expect(sourceMatchers.contains { $0.workspace == "fixture-workspace" })
+        #expect(sourceMatchers.contains { $0.duringAeroSpaceStartup == true })
+        #expect(migratedMatchers.contains { $0.workspace == "fixture-workspace" })
+        #expect(migratedMatchers.contains { $0.duringAeroSpaceStartup == true })
     }
 
-    func testMigrateCurrentShapeV1FixturePreservesEveryDraftFieldAndSourceBlock() throws {
+    @Test func testMigrateCurrentShapeV1FixturePreservesEveryDraftFieldAndSourceBlock() throws {
         try assertFixtureMigration(named: "config-v1-current-shape")
     }
 
+    @Test(
+        "Set AEROSPACE_MIGRATION_DRY_RUN to inspect a local config",
+        .enabled(if: ProcessInfo.processInfo.environment["AEROSPACE_MIGRATION_DRY_RUN"] != nil),
+    )
     func testDryRunMigrationFromEnvironmentWithoutWriting() throws {
-        guard let path = ProcessInfo.processInfo.environment["AEROSPACE_MIGRATION_DRY_RUN"] else {
-            throw XCTSkip("Set AEROSPACE_MIGRATION_DRY_RUN to inspect a local config")
-        }
+        guard let path = ProcessInfo.processInfo.environment["AEROSPACE_MIGRATION_DRY_RUN"] else { return }
 
         let sourceText = try String(contentsOfFile: path, encoding: .utf8)
         let source = parseConfig(sourceText)
-        XCTAssertEqual(source.errors, [])
+        #expect(source.errors == [])
         guard source.errors.isEmpty else { return }
         guard source.config.configVersion == 1 else {
             print("Migration dry run diff: skipped; source is already config-version \(source.config.configVersion)")
-            throw XCTSkip("AEROSPACE_MIGRATION_DRY_RUN must point to an effective config-version 1 file")
+            return // AEROSPACE_MIGRATION_DRY_RUN must point to an effective config-version 1 file
         }
 
         let candidate = migrate(sourceText)
         let migrated = parseConfig(candidate.text)
-        XCTAssertEqual(migrated.errors, [])
+        #expect(migrated.errors == [])
 
         let sourceKeysAndTables = TomlBlockDocument(sourceText).blocks.compactMap(\.name)
         let candidateKeysAndTables = TomlBlockDocument(candidate.text).blocks.compactMap(\.name)
@@ -62,10 +65,10 @@ final class ConfigMigratorTest: XCTestCase {
         print("Migration dry run workspaces: \(candidate.persistentWorkspaces.joined(separator: ", "))")
         print("Migration dry run diff: config-version and persistent-workspaces; bytes \(sourceText.utf8.count) -> \(candidate.text.utf8.count)")
 
-        XCTAssertEqual(try String(contentsOfFile: path, encoding: .utf8), sourceText)
+        #expect(try String(contentsOfFile: path, encoding: .utf8) == sourceText)
     }
 
-    func testMigrateAddsVersionAndPersistentWorkspacesToAnImplicitV1Config() {
+    @Test func testMigrateAddsVersionAndPersistentWorkspacesToAnImplicitV1Config() {
         let candidate = migrate(
             """
             [mode.main.binding]
@@ -87,7 +90,7 @@ final class ConfigMigratorTest: XCTestCase {
         )
     }
 
-    func testMigrateRewritesAnExplicitV1VersionInPlace() {
+    @Test func testMigrateRewritesAnExplicitV1VersionInPlace() {
         let candidate = migrate(
             """
             # Keep this comment
@@ -113,21 +116,21 @@ final class ConfigMigratorTest: XCTestCase {
         )
     }
 
-    func testMigrateRejectsUnsupportedPaths() {
+    @Test func testMigrateRejectsUnsupportedPaths() {
         assertEquals(
             ConfigMigrator.migrate(text: "", from: 2, to: 1),
             .failure(.unsupportedPath(from: 2, to: 1)),
         )
     }
 
-    func testMigrateRejectsAnInvalidSource() {
+    @Test func testMigrateRejectsAnInvalidSource() {
         assertEquals(
             ConfigMigrator.migrate(text: "config-version = 0\n", from: 1, to: 2),
             .failure(.invalidSource(["config-version: Must be in [1, 2] range"])),
         )
     }
 
-    func testMigrateEmitsBindingThenAssignmentWorkspacesInSourceOrder() {
+    @Test func testMigrateEmitsBindingThenAssignmentWorkspacesInSourceOrder() {
         let candidate = migrate(
             """
             [key-mapping]
@@ -150,10 +153,10 @@ final class ConfigMigratorTest: XCTestCase {
         )
 
         assertEquals(candidate.persistentWorkspaces, ["three", "two", "one", "four", "five"])
-        XCTAssertTrue(candidate.text.contains("persistent-workspaces = ['three', 'two', 'one', 'four', 'five']"))
+        #expect(candidate.text.contains("persistent-workspaces = ['three', 'two', 'one', 'four', 'five']"))
     }
 
-    func testMigrateKeepsSourceSemanticContextWhenParsingSplitBindings() {
+    @Test func testMigrateKeepsSourceSemanticContextWhenParsingSplitBindings() {
         let candidate = migrate(
             """
             enable-normalization-flatten-containers = false
@@ -165,10 +168,10 @@ final class ConfigMigratorTest: XCTestCase {
         )
 
         assertEquals(candidate.persistentWorkspaces, ["1"])
-        XCTAssertTrue(candidate.text.contains("enable-normalization-flatten-containers = false"))
+        #expect(candidate.text.contains("enable-normalization-flatten-containers = false"))
     }
 
-    func testMigrateUsesCustomKeyMappingWrittenAsDottedKeys() {
+    @Test func testMigrateUsesCustomKeyMappingWrittenAsDottedKeys() {
         let candidate = migrate(
             """
             key-mapping.key-notation-to-key-code.zz = 'a'
@@ -181,7 +184,7 @@ final class ConfigMigratorTest: XCTestCase {
         assertEquals(candidate.persistentWorkspaces, ["one"])
     }
 
-    func testMigrateParsesMultilineTomlBindingStrings() {
+    @Test func testMigrateParsesMultilineTomlBindingStrings() {
         let candidate = migrate(
             #"""
             [mode.main.binding]
@@ -194,7 +197,7 @@ final class ConfigMigratorTest: XCTestCase {
         assertEquals(candidate.persistentWorkspaces, ["one"])
     }
 
-    func testMigrateCollectsAssignmentsWithoutModeBindings() {
+    @Test func testMigrateCollectsAssignmentsWithoutModeBindings() {
         let candidate = migrate(
             """
             [workspace-to-monitor-force-assignment]
@@ -206,7 +209,7 @@ final class ConfigMigratorTest: XCTestCase {
         assertEquals(candidate.persistentWorkspaces, ["one", "two"])
     }
 
-    func testMigrateOnlyRewritesVersionAndPersistentWorkspaceLines() {
+    @Test func testMigrateOnlyRewritesVersionAndPersistentWorkspaceLines() {
         let candidate = migrate(
             """
             config-version = 1
@@ -238,36 +241,34 @@ final class ConfigMigratorTest: XCTestCase {
         switch ConfigMigrator.migrate(text: text, from: 1, to: 2) {
             case .success(let candidate): return candidate
             case .failure(let error):
-                XCTFail("Migration failed: \(error)")
+                Issue.record(Comment(rawValue: "Migration failed: \(error)"))
                 fatalError("Migration failed")
         }
     }
 
-    private func assertFixtureMigration(named name: String, file: StaticString = #filePath, line: UInt = #line) throws {
+    private func assertFixtureMigration(named name: String, sourceLocation: SourceLocation = #_sourceLocation) throws {
         let sourceText = try String(
             contentsOf: projectRoot.appending(component: "Sources/AppBundleTests/config/fixtures/\(name).toml"),
             encoding: .utf8,
         )
         let source = parseConfig(sourceText)
-        XCTAssertEqual(source.errors, [], "Invalid fixture \(name)", file: file, line: line)
+        #expect(source.errors == [], "Invalid fixture \(name)", sourceLocation: sourceLocation)
         guard source.errors.isEmpty else { return }
 
         let candidate = migrate(sourceText)
         let migrated = parseConfig(candidate.text)
-        XCTAssertEqual(migrated.errors, [], "Invalid migrated fixture \(name)", file: file, line: line)
+        #expect(migrated.errors == [], "Invalid migrated fixture \(name)", sourceLocation: sourceLocation)
         guard migrated.errors.isEmpty else { return }
 
         assertEveryDraftField(
             source: draft(from: source.config, text: sourceText),
             migrated: draft(from: migrated.config, text: candidate.text),
-            file: file,
-            line: line,
+            sourceLocation: sourceLocation,
         )
         assertEveryNonMigrationBlockIsByteIdentical(
             sourceText: sourceText,
             candidateText: candidate.text,
-            file: file,
-            line: line,
+            sourceLocation: sourceLocation,
         )
     }
 
@@ -282,8 +283,7 @@ final class ConfigMigratorTest: XCTestCase {
     private func assertEveryDraftField(
         source: Draft,
         migrated: Draft,
-        file: StaticString,
-        line: UInt,
+        sourceLocation: SourceLocation,
     ) {
         let fields: [(name: String, matches: (Draft, Draft) -> Bool)] = [
             ("startAtLogin", { $0.startAtLogin == $1.startAtLogin }),
@@ -317,19 +317,18 @@ final class ConfigMigratorTest: XCTestCase {
         ]
 
         for field in fields {
-            XCTAssertTrue(field.matches(source, migrated), "Draft field changed: \(field.name)", file: file, line: line)
+            #expect(field.matches(source, migrated), "Draft field changed: \(field.name)", sourceLocation: sourceLocation)
         }
     }
 
     private func assertEveryNonMigrationBlockIsByteIdentical(
         sourceText: String,
         candidateText: String,
-        file: StaticString,
-        line: UInt,
+        sourceLocation: SourceLocation,
     ) {
         let migrationOwnedKeys = Set(["config-version", "persistent-workspaces"])
         let sourceBlocks = TomlBlockDocument(sourceText).blocks.filter { !migrationOwnedKeys.contains($0.name ?? "") }
         let candidateBlocks = TomlBlockDocument(candidateText).blocks.filter { !migrationOwnedKeys.contains($0.name ?? "") }
-        XCTAssertEqual(candidateBlocks, sourceBlocks, "A non-migration TOML block changed or moved", file: file, line: line)
+        #expect(candidateBlocks == sourceBlocks, "A non-migration TOML block changed or moved", sourceLocation: sourceLocation)
     }
 }

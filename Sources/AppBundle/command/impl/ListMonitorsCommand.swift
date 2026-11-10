@@ -6,14 +6,14 @@ struct ListMonitorsCommand: Command {
     /*conforms*/ let shouldResetClosedWindowsCache = false
 
     func run(_ env: CmdEnv, _ io: CmdIo) -> BinaryExitCode {
-        let focus = focus
-        var result = sortedMonitors
+        let focus = globalFocus
+        var result = globalSortedMonitorInfos
         if let focused = args.focused {
-            result = result.filter { (monitor) in (monitor.activeWorkspace == focus.workspace) == focused }
+            result = result.filter { (monitor) in (monitor.visibleWorkspace == focus.workspace) == focused }
         }
         if let mouse = args.mouse {
-            let mouseWorkspace = mouseLocation.monitorApproximation.activeWorkspace
-            result = result.filter { (monitor) in (monitor.activeWorkspace == mouseWorkspace) == mouse }
+            let mouseWorkspace = mouseLocation.monitorApproximation.visibleWorkspace
+            result = result.filter { (monitor) in (monitor.visibleWorkspace == mouseWorkspace) == mouse }
         }
 
         lazy var list = result.map(AeroObj.monitor)
@@ -28,7 +28,7 @@ struct ListMonitorsCommand: Command {
             default:
                 switch list.format(args.format) {
                     case .success(let lines): .succ(io.out(lines))
-                    case .failure(let msg): .fail(io.err(msg))
+                    case .failure(let msg): .fail(io.err(msg.map(\.description).joinErrors()))
                 }
         }
     }

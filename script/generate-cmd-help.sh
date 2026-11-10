@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Generates cmdHelpGenerated.swift from the ```synopsis fenced block of each
 # docs-md/commands/*.md page.
 cd "$(dirname "$0")/.."

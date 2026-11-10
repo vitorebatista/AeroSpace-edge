@@ -30,7 +30,7 @@ struct ExecConfig: Equatable {
     var envVariables: [String: String] = env + defaultOverriddenEnvVars
 }
 
-struct RawExecConfig: ConvenienceCopyable, Equatable {
+struct RawExecConfig: Withable, Equatable {
     var inheritEnvVariables = true
     // Already interpolated value of overridden vars
     var overriddenVars: [String: String] = [:]
@@ -41,13 +41,13 @@ struct RawExecConfig: ConvenienceCopyable, Equatable {
     }
 }
 
-func parseExecConfig(_ raw: Json, _ backtrace: ConfigBacktrace, _ errors: inout [ConfigParseError]) -> ExecConfig {
-    parseTable(raw, RawExecConfig(), rawExecConfigParser, backtrace, &errors).expand()
+func parseExecConfig(_ raw: OrderedJson, _ backtrace: ConfigBacktrace, _ c: inout ConfigParserContext) -> ExecConfig {
+    parseNonEmptyTable(raw, RawExecConfig(), rawExecConfigParser, backtrace, &c).expand()
 }
 
-private func parseEnvVariables(_ raw: Json, _ backtrace: ConfigBacktrace, _ errors: inout [ConfigParseError]) -> [String: String] {
+private func parseEnvVariables(_ raw: OrderedJson, _ backtrace: ConfigBacktrace, _ c: inout ConfigParserContext) -> [String: String] {
     guard let table = raw.asDictOrNil else {
-        errors.append(expectedActualTypeError(expected: .array, actual: raw.tomlType, backtrace))
+        c.errors.append(expectedActualTypeDiagnostic(expected: .array, actual: raw.tomlType, backtrace))
         return [:]
     }
     let mutated = table.keys
@@ -56,15 +56,15 @@ private func parseEnvVariables(_ raw: Json, _ backtrace: ConfigBacktrace, _ erro
     var result: [String: String] = [:]
     for (key, value) in table {
         let backtrace = backtrace + .key(key)
-        if key == "PWD" { errors.append(.semantic(backtrace, "Changing 'PWD' is not allowed")) }
-        guard let rawStr = parseString(value, backtrace).getOrNil(appendErrorTo: &errors) else { continue }
+        if key == "PWD" { c.errors.append(.init(backtrace, "Changing 'PWD' is not allowed")) }
+        guard let rawStr = parseString(value, backtrace).getOrNil(appendErrorTo: &c.errors) else { continue }
         var env = baseEnv
         if let add: String = fullEnv[key] {
             env[key] = add
         }
         switch rawStr.interpolate(with: env) {
             case .success(let interpolated): result[key] = interpolated
-            case .failure(let _errros): errors += _errros.map { .semantic(backtrace, $0) }
+            case .failure(let _errros): c.errors += _errros.map { .init(backtrace, $0) }
         }
     }
     return result

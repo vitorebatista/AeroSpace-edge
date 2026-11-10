@@ -12,18 +12,27 @@ public final class TrayMenuModel: ObservableObject {
     @Published var isEnabled: Bool = true
     @Published var workspaces: [WorkspaceViewModel] = []
     @Published var experimentalUISettings: ExperimentalUISettings = ExperimentalUISettings()
+    @Published var lastReloadConfigContainedWarnings: Bool = false
+    @Published var axPermissionStatus: AxPermissionStatus = .waitingWithPrompt
+}
+
+enum AxPermissionStatus: Equatable {
+    case granted
+    case waiting
+    case waitingWithPrompt
 }
 
 @MainActor func updateTrayText() {
-    let sortedMonitors = sortedMonitors
-    let focus = focus
+    let sortedMonitors = globalSortedMonitorInfos
+    let focus = globalFocus
     // @Published notifies even for equal values, invalidating the menu bar and menu body on every refresh session
     let trayText = (activeMode?.takeIf { $0 != mainModeId }?.first.map { "(\($0.uppercased())) " } ?? "") +
         sortedMonitors
+        .lazy
         .map {
-            let hasFullscreenWindows = $0.activeWorkspace.allLeafWindowsRecursive.contains { $0.isFullscreen }
-            let activeWorkspaceName = hasFullscreenWindows ? "[\($0.activeWorkspace.name)]" : $0.activeWorkspace.name
-            return ($0.activeWorkspace == focus.workspace && sortedMonitors.count > 1 ? "*" : "") + activeWorkspaceName
+            let hasFullscreenWindows = $0.visibleWorkspace.allLeafWindowsRecursive.contains { $0.isFullscreen }
+            let visibleWorkspaceName = hasFullscreenWindows ? "[\($0.visibleWorkspace.name)]" : $0.visibleWorkspace.name
+            return ($0.visibleWorkspace == focus.workspace && sortedMonitors.count > 1 ? "*" : "") + visibleWorkspaceName
         }
         .joined(separator: " │ ")
     if TrayMenuModel.shared.trayText != trayText { TrayMenuModel.shared.trayText = trayText }
@@ -32,7 +41,7 @@ public final class TrayMenuModel: ObservableObject {
         let dash = " - "
         let suffix = switch true {
             case !apps.isEmpty: dash + apps.sorted().joinTruncating(separator: ", ", length: 25)
-            case $0.isVisible: dash + $0.workspaceMonitor.name
+            case $0.isVisible: dash + $0.workspaceMonitorInfo.name
             default: ""
         }
         let hasFullscreenWindows = $0.allLeafWindowsRecursive.contains { $0.isFullscreen }
@@ -65,11 +74,11 @@ public final class TrayMenuModel: ObservableObject {
         }
     if TrayMenuModel.shared.workspaces != workspaces { TrayMenuModel.shared.workspaces = workspaces }
     var items = sortedMonitors.map {
-        let hasFullscreenWindows = $0.activeWorkspace.allLeafWindowsRecursive.contains { $0.isFullscreen }
+        let hasFullscreenWindows = $0.visibleWorkspace.allLeafWindowsRecursive.contains { $0.isFullscreen }
         return TrayItem(
             type: .workspace,
-            name: $0.activeWorkspace.name,
-            isActive: $0.activeWorkspace == focus.workspace,
+            name: $0.visibleWorkspace.name,
+            isActive: $0.visibleWorkspace == focus.workspace,
             hasFullscreenWindows: hasFullscreenWindows,
         )
     }
