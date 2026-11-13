@@ -40,7 +40,9 @@ Maintainer runbook for the `vitorebatista/AeroSpace-edge` fork. All credit for A
   skipped: `c548c7f8` (`Monitor` → `MonitorInfo` rename, part of the "track upstream main" milestone)
   and `ae2aa7aa` (upstream-only PR-labelling CI) — and 17 new open PRs, of which it ported #2244,
   #2232, #2211, #2228 and #2225 as fork PRs #55–#59.
-- **Released:** `v1.18` (cut 2026-11-10): the full upstream resync (fork PR #96, upstream `main` @ `0921fb81`).
+- **Released:** `v1.18.1` (cut 2026-11-13): fork PR #99, `move-workspace-to-monitor` no longer undoes
+  itself (1.18 regression from upstream's monitor tree). Lean build (app + CLI).
+  Previous: `v1.18` (cut 2026-11-10): the full upstream resync (fork PR #96, upstream `main` @ `0921fb81`).
   Lean build (app + CLI): `build-release.sh` minus `build-docs.sh`, `build-shell-completion.sh` and the
   man-page/completion packing, so the certificate and binary validation still run.
   Previous: `v1.17` (cut 2026-11-09): the 2026-11-09 upstream sync, fork PRs #77–#94
