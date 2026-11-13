@@ -41,7 +41,8 @@ extension WorkspacesContainer {
     {
         return prev
     }
-    if let candidate = container.mostRecentChild as? Workspace {
+    // Skip the visible workspace: during move-workspace-to-monitor it is the one being moved away (pre-1.18 behavior)
+    if let candidate = container.mruChildren.lazy.compactMap({ $0 as? Workspace }).first(where: { !$0.isVisible }) {
         return candidate
     }
     return (1 ... Int.max).lazy

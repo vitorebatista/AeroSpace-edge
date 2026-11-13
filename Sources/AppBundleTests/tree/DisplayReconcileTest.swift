@@ -16,6 +16,25 @@ struct DisplayReconcileTest {
         resetFocusForTests()
     }
 
+    // 1.18 regression: the stub for the monitor left behind was the moved workspace itself, so the move was undone
+    // and the target monitor was left with no visible workspace
+    @Test func testMoveWorkspaceToMonitorLeavesEveryMonitorAWorkspace() async {
+        defer { tearDown() }
+        for target in ["next", "prev", "--wrap-around next", "--wrap-around prev"] {
+            seedOpenThreeMonitors(forceAssignNumerics: false)
+            assertTrue(Workspace.get(byName: "2").focusWorkspace())
+            for _ in 0 ..< 4 {
+                let before = Workspace.get(byName: "2").workspaceMonitorInfo.rect.topLeftCorner
+                _ = await parseCommand("move-workspace-to-monitor \(target)").cmdOrDie.run(.defaultEnv, .emptyStdin)
+                Workspace.garbageCollectUnusedWorkspaces()
+                assertTrue(Workspace.all.allSatisfy { $0.nodeMonitorInfo != nil })
+                assertTrue(Workspace.get(byName: "2").isVisible)
+                if target.contains("wrap") { assertNotEquals(Workspace.get(byName: "2").workspaceMonitorInfo.rect.topLeftCorner, before) }
+                assertReconcileInvariants()
+            }
+        }
+    }
+
     @Test func testFocusedForceAssignedWorkspaceStaysVisibleWhenMonitorDisconnects() {
         defer { tearDown() }
         seedOpenThreeMonitors(forceAssignNumerics: true)
