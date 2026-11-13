@@ -26,6 +26,17 @@ The last upstream `main` commit merged into the fork (`0921fb81`) is recorded he
 > older than 1.10 still reports its original `0.20.3-Beta-fork.N` version string internally —
 > only 1.10 was rebuilt under the new scheme.
 
+## v1.18.1 (2026-11-13)
+
+One user-facing fix, no new behavior. Fork-original, no backports.
+
+- **`move-workspace-to-monitor` works again.** Upstream's monitor-tree refactor (merged in 1.18) made
+  `getStubWorkspace` take the monitor's most recent workspace, which is the visible one being moved.
+  The command moved the workspace to the target and straight back, leaving the target monitor without
+  a valid visible workspace, and the next layout could crash with `orDie` in `workspaceMonitorInfo`.
+  The stub now skips visible workspaces, as before 1.18. Upstream `main` has the same code.
+  (fork PR #99)
+
 ## v1.18 (2026-11-10): full upstream resync (upstream main @ 0921fb81)
 
 The fork now **tracks upstream `main` through merges**. This release merges every upstream `main`
