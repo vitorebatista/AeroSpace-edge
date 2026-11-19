@@ -5,23 +5,28 @@ import Testing
 @MainActor
 @Suite(.serializedGlobally)
 struct ConflictingAppCheckTest {
+    private let ownPid: Int32 = 100
+    private let otherPid: Int32 = 200
+
     @Test func testDetectsUpstreamAeroSpaceBuilds() {
-        assertEquals(conflictingAppIds(among: ["bobko.aerospace"]), ["bobko.aerospace"])
-        assertEquals(conflictingAppIds(among: ["bobko.aerospace.debug"]), ["bobko.aerospace.debug"])
+        assertTrue(isConflictingApp(appId: "bobko.aerospace", pid: otherPid, ownPid: ownPid))
+        assertTrue(isConflictingApp(appId: "bobko.aerospace.debug", pid: otherPid, ownPid: ownPid))
     }
 
     /// Blocking on ourselves would make the app refuse to ever start.
-    @Test func testOwnAppIdIsNeverAConflict() {
-        assertEquals(conflictingAppIds(among: [aeroSpaceAppId]), [])
-        assertEquals(conflictingAppIds(among: [stableAeroSpaceAppId]).contains(aeroSpaceAppId), false)
+    @Test func testOwnProcessIsNeverAConflict() {
+        assertFalse(isConflictingApp(appId: aeroSpaceAppId, pid: ownPid, ownPid: ownPid))
+    }
+
+    /// A dev build left running next to the installed app: same app id, different process. Both
+    /// manage the same windows, and a click made the stale one drag focus back to its own workspace.
+    @Test func testSecondCopyOfThisAppIsAConflict() {
+        assertTrue(isConflictingApp(appId: aeroSpaceAppId, pid: otherPid, ownPid: ownPid))
     }
 
     @Test func testUnrelatedAppsAreIgnored() {
-        assertEquals(conflictingAppIds(among: ["com.apple.finder", "com.koekeishiya.yabai", "com.if.Amethyst"]), [])
-    }
-
-    @Test func testPicksConflictsOutOfAFullRunningAppList() {
-        let running = ["com.apple.finder", "bobko.aerospace", aeroSpaceAppId, "com.googlecode.iterm2"]
-        assertEquals(conflictingAppIds(among: running), ["bobko.aerospace"])
+        for appId in ["com.apple.finder", "com.koekeishiya.yabai", "com.if.Amethyst"] {
+            assertFalse(isConflictingApp(appId: appId, pid: otherPid, ownPid: ownPid))
+        }
     }
 }

@@ -14,9 +14,13 @@ let conflictingAeroSpaceAppIds: [String] = [
 ]
 
 /// The decidable part of the check, kept free of AppKit so it can be tested.
-/// Our own app id is never a conflict — a second instance of the same bundle is macOS's problem, not ours.
-func conflictingAppIds(among runningAppIds: [String]) -> [String] {
-    runningAppIds.filter { $0 != aeroSpaceAppId && conflictingAeroSpaceAppIds.contains($0) }
+///
+/// A second copy of this very app is a conflict too. macOS only refuses to launch the same bundle
+/// *path* twice: a copy elsewhere on disk (a dev build next to the installed app), or the executable
+/// started directly, gets its own process under the same app id. The two then keep separate models of
+/// the same windows, and the stale one drags focus back to "its" workspace on the next click.
+func isConflictingApp(appId: String, pid: Int32, ownPid: Int32) -> Bool {
+    appId == aeroSpaceAppId ? pid != ownPid : conflictingAeroSpaceAppIds.contains(appId)
 }
 
 /// Blocks startup while another AeroSpace is running: alerts, offers to quit it, and re-checks until it's
@@ -45,25 +49,39 @@ func checkNoConflictingAeroSpaceIsRunning() async {
 private func runningConflictingApps() -> [NSRunningApplication] {
     NSWorkspace.shared.runningApplications.filter { app in
         guard let id = app.bundleIdentifier else { return false }
-        return !conflictingAppIds(among: [id]).isEmpty
+        return isConflictingApp(appId: id, pid: app.processIdentifier, ownPid: getpid())
     }
 }
 
 @MainActor
 private func presentConflictAlert(_ apps: [NSRunningApplication]) -> NSApplication.ModalResponse {
-    let otherName = apps.compactMap(\.localizedName).first ?? "AeroSpace"
     let alert = NSAlert()
     alert.alertStyle = .critical
-    alert.messageText = "\(otherName) is already running"
-    alert.informativeText = """
-        \(aeroSpaceAppName) and \(otherName) are both tiling window managers. Running them at the same \
-        time means two window managers moving the same windows and competing for the same keyboard \
-        shortcuts, so only one can run.
-
-        Quit \(otherName) to continue, or quit \(aeroSpaceAppName) and keep using the one already running.
+    let why = """
+        Running them at the same time means two window managers moving the same windows and competing \
+        for the same keyboard shortcuts, so only one can run.
         """
-    alert.addButton(withTitle: "Quit \(otherName) and Continue")
-    alert.addButton(withTitle: "Quit \(aeroSpaceAppName)")
+    // A second copy of ourselves has our own name, so say where it runs from instead
+    if let copy = apps.first(where: { $0.bundleIdentifier == aeroSpaceAppId }) {
+        alert.messageText = "Another copy of \(aeroSpaceAppName) is already running"
+        alert.informativeText = """
+            It runs from \(copy.bundleURL?.path ?? "an unknown location") (pid \(copy.processIdentifier)). \(why)
+
+            Quit the other copy to continue, or quit this one and keep using the one already running.
+            """
+        alert.addButton(withTitle: "Quit the Other Copy and Continue")
+        alert.addButton(withTitle: "Quit This Copy")
+    } else {
+        let otherName = apps.compactMap(\.localizedName).first ?? "AeroSpace"
+        alert.messageText = "\(otherName) is already running"
+        alert.informativeText = """
+            \(aeroSpaceAppName) and \(otherName) are both tiling window managers. \(why)
+
+            Quit \(otherName) to continue, or quit \(aeroSpaceAppName) and keep using the one already running.
+            """
+        alert.addButton(withTitle: "Quit \(otherName) and Continue")
+        alert.addButton(withTitle: "Quit \(aeroSpaceAppName)")
+    }
     return alert.runModal()
 }
 
