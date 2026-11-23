@@ -70,7 +70,19 @@ enum GlobalObserver {
                 try? await Task.sleep(for: screenSleepWakeSettleDelay)
                 if Task.isCancelled { return }
                 screenSleepWakeInProgress = false
-                scheduleCancellableCompleteRefreshSession(.globalObserver(notifName))
+                // Lay out before the refresh's AX enumeration rather than after it. Displays drop
+                // on sleep, so macOS reflows windows onto whatever screens remain and the user
+                // wakes up looking at that arrangement; every millisecond until the layout pass is
+                // a millisecond of windows sitting visibly wrong. refreshAllAndGetAliveWindowIds
+                // walks every window of every running app over the AX API, which is the bulk of a
+                // complete refresh - putting the layout after it means the correction lands only
+                // once that walk finishes. The tree is still accurate across a sleep (windows
+                // rarely open or close while the screens are off) and layoutWorkspaces() reads
+                // NSScreen.screens live, so the optimistic pass has the geometry it needs.
+                scheduleCancellableCompleteRefreshSession(
+                    .globalObserver(notifName),
+                    optimisticallyPreLayoutWorkspaces: true,
+                )
             }
         }
     }
