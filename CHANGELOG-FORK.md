@@ -26,6 +26,20 @@ The last upstream `main` commit merged into the fork (`0921fb81`) is recorded he
 > older than 1.10 still reports its original `0.20.3-Beta-fork.N` version string internally —
 > only 1.10 was rebuilt under the new scheme.
 
+## v1.18.2 (2026-11-28)
+
+Two user-facing fixes, no new behavior. Fork-original, no backports.
+
+- **No crash on launch once the build's source tree is gone.** SwiftUI built `SettingsModel.shared`
+  before startup cleared `_isUnitTest` (it was cleared inside the startup `Task`), so
+  `defaultConfigUrl` took the unit-test branch and looked for `default-config.toml` in the source tree
+  the release was built from. Releases worked only while that directory existed; deleting it crashed
+  every launch in `getDefaultConfigUrlFromProject()`. The flags are now cleared before the scene
+  builds. (fork PR #103)
+- **Refuses to start next to a second copy of AeroSpace-edge.** A copy elsewhere on disk (e.g. a dev
+  build) ran as a second server under the same app id and the two fought over focus. The alert names
+  the other copy's path and pid. (fork PR #101)
+
 ## v1.18.1 (2026-11-13)
 
 One user-facing fix, no new behavior. Fork-original, no backports.
