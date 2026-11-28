@@ -3,13 +3,16 @@ import Common
 import Foundation
 
 @MainActor public func initAppBundle() {
+    // Synchronously, before the scene builds: `@StateObject SettingsModel.shared` reads
+    // `defaultConfigUrl`, which takes the unit-test branch (the build machine's source tree) while
+    // `_isUnitTest` is still true, and dies once that tree is gone.
+    unsafe _isCli = false
+    unsafe _isUnitTest = false
     // Synchronously, before the scene builds: the status item reads its stored position the moment
     // `MenuBarExtra` creates it, and nothing can move it afterwards.
     applyMenuBarItemPosition()
     Task.startUnstructured {
         initTerminationHandler()
-        unsafe _isCli = false
-        unsafe _isUnitTest = false
         initServerArgs()
         // Must be read here: everything below focuses workspaces and overwrites the same key.
         let focusedWorkspaceAtLaunch = storedFocusedWorkspace()
